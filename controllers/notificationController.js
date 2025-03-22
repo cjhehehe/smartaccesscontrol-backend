@@ -30,6 +30,7 @@ export const createNewNotification = async (req, res) => {
       });
     }
 
+    // Do not accept a created_at field from the client.
     const { data, error } = await createNotification({
       recipient_guest_id,
       title,
@@ -74,6 +75,7 @@ export const createAdminNotification = async (req, res) => {
       });
     }
 
+    // Do not accept a created_at field from the client.
     const { data, error } = await createNotification({
       recipient_admin_id,
       title,
