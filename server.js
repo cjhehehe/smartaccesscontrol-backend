@@ -28,9 +28,6 @@ import { errorHandler } from './middlewares/errorHandler.js';
 dotenv.config();
 const app = express();
 
-// Import cronJobs to start scheduled tasks
-import './cronJobs.js';
-
 // Core Middlewares
 app.set('trust proxy', 1);
 app.use(express.json());
