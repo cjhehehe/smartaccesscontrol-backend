@@ -3,6 +3,7 @@ import supabase from '../config/supabase.js';
 
 /**
  * Create a new notification.
+ * This version stores the local server time in 'created_at'.
  */
 export const createNotification = async (notifData) => {
   try {
@@ -10,8 +11,8 @@ export const createNotification = async (notifData) => {
     if (notifData.is_read === undefined) {
       notifData.is_read = false;
     }
-    // Generate a UTC timestamp
-    const created_at = new Date().toISOString();
+    // Use local server time instead of UTC toISOString()
+    const localTime = new Date();
 
     const { data, error } = await supabase
       .from('notifications')
@@ -24,7 +25,7 @@ export const createNotification = async (notifData) => {
           note_message: notifData.note_message ?? null,
           notification_type: notifData.notification_type ?? null,
           is_read: notifData.is_read,
-          created_at, // UTC timestamp
+          created_at: localTime, // local server time
         },
       ])
       .select('*')
