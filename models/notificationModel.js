@@ -2,8 +2,15 @@
 import supabase from '../config/supabase.js';
 
 /**
+ * Make sure your notifications table has:
+ *   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+ * in Supabase.
+ *
+ * We do NOT pass created_at so the DB can insert the current UTC time.
+ */
+
+/**
  * Create a new notification.
- * The DB automatically sets created_at via TIMESTAMPTZ DEFAULT now().
  */
 export const createNotification = async (notifData) => {
   try {
@@ -12,7 +19,7 @@ export const createNotification = async (notifData) => {
       notifData.is_read = false;
     }
 
-    // Omit created_at entirely so the DB sets it (now())
+    // Omit created_at so DB sets it automatically
     const { data, error } = await supabase
       .from('notifications')
       .insert([
@@ -24,7 +31,7 @@ export const createNotification = async (notifData) => {
           note_message: notifData.note_message ?? null,
           notification_type: notifData.notification_type ?? null,
           is_read: notifData.is_read
-          // No created_at field
+          // NO created_at field
         },
       ])
       .select('*')
