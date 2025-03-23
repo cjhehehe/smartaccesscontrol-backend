@@ -12,7 +12,7 @@ import {
 } from '../models/notificationModel.js';
 
 /**
- * Create a new notification (for Guest)
+ * Create a new notification (for Guest).
  */
 export const createNewNotification = async (req, res) => {
   try {
@@ -30,7 +30,7 @@ export const createNewNotification = async (req, res) => {
       });
     }
 
-    // We do NOT accept a created_at field from the client; DB sets it automatically.
+    // Create a single row for the guest
     const { data, error } = await createNotification({
       recipient_guest_id,
       title,
@@ -57,7 +57,7 @@ export const createNewNotification = async (req, res) => {
 };
 
 /**
- * Create a new notification (for Admin)
+ * Create a new notification (for Admin).
  */
 export const createAdminNotification = async (req, res) => {
   try {
@@ -75,7 +75,7 @@ export const createAdminNotification = async (req, res) => {
       });
     }
 
-    // We do NOT accept a created_at field from the client; DB sets it automatically.
+    // Create a single row for the admin
     const { data, error } = await createNotification({
       recipient_admin_id,
       title,
@@ -97,6 +97,80 @@ export const createAdminNotification = async (req, res) => {
     });
   } catch (err) {
     console.error('[Notification] Unexpected Error in createAdminNotification:', err);
+    return res.status(500).json({ message: 'Internal server error' });
+  }
+};
+
+/**
+ * (NEW) Create notifications for BOTH Guest and Admin in one call.
+ * This will insert two rows in the "notifications" table:
+ *   - One with recipient_guest_id
+ *   - One with recipient_admin_id
+ */
+export const createGuestAndAdminNotification = async (req, res) => {
+  try {
+    const {
+      guest_id,          // ID of the guest
+      admin_id,          // ID of the admin
+      guest_title,
+      guest_message,
+      admin_title,
+      admin_message,
+      notification_type, // optional
+      note_message       // optional
+    } = req.body;
+
+    // Basic validation
+    if (
+      !guest_id ||
+      !admin_id ||
+      !guest_title ||
+      !guest_message ||
+      !admin_title ||
+      !admin_message
+    ) {
+      return res.status(400).json({
+        message: 'Missing required fields: guest_id, admin_id, guest_title, guest_message, admin_title, admin_message'
+      });
+    }
+
+    // 1) Create the guest notification
+    const { data: guestData, error: guestError } = await createNotification({
+      recipient_guest_id: guest_id,
+      title: guest_title,
+      message: guest_message,
+      note_message,
+      notification_type
+    });
+    if (guestError) {
+      return res.status(500).json({
+        message: 'Database error: Unable to create guest notification',
+        error: guestError.message
+      });
+    }
+
+    // 2) Create the admin notification
+    const { data: adminData, error: adminError } = await createNotification({
+      recipient_admin_id: admin_id,
+      title: admin_title,
+      message: admin_message,
+      note_message,
+      notification_type
+    });
+    if (adminError) {
+      return res.status(500).json({
+        message: 'Database error: Unable to create admin notification',
+        error: adminError.message
+      });
+    }
+
+    return res.status(201).json({
+      message: 'Guest and Admin notifications created successfully',
+      guestNotification: guestData,
+      adminNotification: adminData
+    });
+  } catch (err) {
+    console.error('[Notification] Unexpected Error in createGuestAndAdminNotification:', err);
     return res.status(500).json({ message: 'Internal server error' });
   }
 };

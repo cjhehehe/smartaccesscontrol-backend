@@ -10,7 +10,9 @@ import {
   markAllAdminNotifsRead,
   clearAllAdminNotifs,
   markAllGuestNotifsRead,
-  clearAllGuestNotifs
+  clearAllGuestNotifs,
+  // IMPORT the new controller method:
+  createGuestAndAdminNotification
 } from '../controllers/notificationController.js';
 
 const router = express.Router();
@@ -20,6 +22,11 @@ router.post('/', createNewNotification);
 
 // POST /api/notifications/admin  (for Admin)
 router.post('/admin', createAdminNotification);
+
+// *** NEW ***
+// POST /api/notifications/both -> creates two notifications:
+// one for a guest, one for an admin.
+router.post('/both', createGuestAndAdminNotification);
 
 // GET /api/notifications/guest/:guest_id
 router.get('/guest/:guest_id', getGuestNotifications);
