@@ -11,8 +11,7 @@ import {
   findRoomByNumber,
 } from '../models/roomsModel.js';
 import { createNotification } from '../models/notificationModel.js';
-
-// Import your adminModel helper
+import { resetRFIDByGuest } from '../models/rfidModel.js'; // Import for resetting RFID status
 import { fetchAllAdminIds } from '../models/adminModel.js';
 
 /**
@@ -27,13 +26,10 @@ async function createNotificationForAllAdmins(
 ) {
   try {
     const adminIds = await fetchAllAdminIds();
-    // If no admins found, just skip
     if (!adminIds || adminIds.length === 0) {
       console.warn('[Rooms] No admin IDs found. Skipping notifyAllAdmins...');
       return;
     }
-
-    // For each admin ID, create a notification
     for (const adminId of adminIds) {
       const { error: notifErr } = await createNotification({
         recipient_admin_id: adminId,
@@ -73,7 +69,6 @@ export const addRoom = async (req, res) => {
       });
     }
 
-    // Check if the room number already exists
     const { data: existingRoom, error: findError } = await findRoomByNumber(room_number);
     if (findError) {
       console.error('[Rooms] Error checking existing room:', findError);
@@ -90,7 +85,6 @@ export const addRoom = async (req, res) => {
       });
     }
 
-    // Prepare new room data with UTC registration_time
     const newRoom = {
       guest_id,
       room_number: room_number.toString(),
@@ -149,7 +143,6 @@ export const assignRoomByNumber = async (req, res) => {
       registration_time: new Date().toISOString(),
     };
 
-    // Only update if the room is available
     const { data, error } = await updateRoomByNumber(room_number, updateFields, {
       onlyIfAvailable: true,
     });
@@ -293,7 +286,6 @@ export const removeRoom = async (req, res) => {
 export const roomCheckIn = async (req, res) => {
   try {
     const { id } = req.params;
-    // Use provided check_in time or current UTC time
     const checkInTime = req.body.check_in || new Date().toISOString();
 
     const { data, error } = await checkInRoom(id, checkInTime);
@@ -312,16 +304,30 @@ export const roomCheckIn = async (req, res) => {
 
 /**
  * POST /api/rooms/:id/checkout
- * Check a guest out of a room (set check_out time and status = 'available').
- * This is used for manual/early check-out.
+ * Check a guest out of a room (reset guest and room related fields to NULL and set status = 'available').
+ * On check-out, the guest’s RFID card is also reset (status changed to 'available').
  */
 export const roomCheckOut = async (req, res) => {
   try {
     const { id } = req.params;
-    const checkOutTime = req.body.check_out || new Date().toISOString();
+    // Fetch current room record to get guest_id and room_number
+    const { data: roomData, error: roomFetchError } = await getRoomById(id);
+    if (roomFetchError) {
+      console.error('[Rooms] Error fetching room data:', roomFetchError);
+      return res.status(500).json({
+        success: false,
+        message: 'Database error: Error fetching room data',
+        error: roomFetchError.message,
+      });
+    }
+    if (!roomData) {
+      return res.status(404).json({ success: false, message: 'Room not found' });
+    }
+    const currentGuestId = roomData.guest_id;
+    const roomNumber = roomData.room_number;
 
-    // 1) Perform the check-out in DB
-    const { data, error } = await checkOutRoom(id, checkOutTime);
+    // Update the room record: reset guest_id, registration_time, hours_stay, check_in, and check_out; set status to 'available'
+    const { data, error } = await checkOutRoom(id);
     if (error) {
       console.error('[Rooms] Error during check-out:', error);
       return res.status(500).json({
@@ -331,19 +337,19 @@ export const roomCheckOut = async (req, res) => {
       });
     }
     if (!data) {
-      return res
-        .status(404)
-        .json({ success: false, message: 'Room not found or could not be checked out.' });
+      return res.status(404).json({
+        success: false,
+        message: 'Room not found or could not be checked out.',
+      });
     }
 
-    // 2) If there's a guest assigned, notify them (Early Check-Out)
-    if (data.guest_id) {
+    // If a guest was assigned, notify them and reset their RFID card status
+    if (currentGuestId) {
       try {
         const notifTitle = 'Early Check-Out';
-        const notifMessage = `You have been checked out of Room #${data.room_number} early.`;
-
+        const notifMessage = `You have been checked out of Room #${roomNumber} early.`;
         const { error: notifErr } = await createNotification({
-          recipient_guest_id: data.guest_id,
+          recipient_guest_id: currentGuestId,
           title: notifTitle,
           message: notifMessage,
           note_message: null,
@@ -352,21 +358,25 @@ export const roomCheckOut = async (req, res) => {
         if (notifErr) {
           console.error('[Rooms] Failed to create occupant check-out notification:', notifErr);
         }
+        // Reset the RFID card for the guest (set status to 'available')
+        const { data: resetData, error: resetError } = await resetRFIDByGuest(currentGuestId);
+        if (resetError) {
+          console.error('[Rooms] Error resetting RFID for guest:', resetError);
+        }
       } catch (notifyErr) {
-        console.error('[Rooms] Error sending occupant check-out notification:', notifyErr);
+        console.error('[Rooms] Error handling guest notifications during checkout:', notifyErr);
       }
     }
 
-    // 3) Notify all admins
+    // Notify all admins about the check-out.
     try {
       const adminTitle = 'Room Checked Out';
-      const adminMessage = `Room #${data.room_number} was checked out (ID: ${id}).`;
+      const adminMessage = `Room #${roomNumber} was checked out (ID: ${id}).`;
       await createNotificationForAllAdmins(adminTitle, adminMessage, 'room_status');
     } catch (adminNotifErr) {
       console.error('[Rooms] Error sending admin check-out notification:', adminNotifErr);
     }
 
-    // 4) Return success
     return res.status(200).json({
       success: true,
       message: 'Check-out successful',
@@ -394,7 +404,6 @@ export const updateRoomStatusByNumber = async (req, res) => {
       });
     }
 
-    // 1) Find the room by its number
     const { data: existingRoom, error: findError } = await findRoomByNumber(room_number);
     if (findError) {
       console.error('[Rooms] Error finding room by number:', findError);
@@ -411,7 +420,6 @@ export const updateRoomStatusByNumber = async (req, res) => {
       });
     }
 
-    // 2) Disallow Occupied -> anything else, unless checked out
     if (existingRoom.status === 'occupied' && status !== 'occupied') {
       return res.status(400).json({
         success: false,
@@ -419,7 +427,6 @@ export const updateRoomStatusByNumber = async (req, res) => {
       });
     }
 
-    // 3) Update the room record with new status
     const { data: updatedRoom, error: updateError } = await updateRoomByNumber(
       room_number,
       { status }
@@ -439,7 +446,6 @@ export const updateRoomStatusByNumber = async (req, res) => {
       });
     }
 
-    // 4) If a guest is assigned, send a notification about the status update
     if (updatedRoom.guest_id) {
       try {
         let statusLabel = status;
@@ -465,7 +471,6 @@ export const updateRoomStatusByNumber = async (req, res) => {
       }
     }
 
-    // 5) Return success
     return res.status(200).json({
       success: true,
       message: `Room #${room_number} status updated to ${status}.`,

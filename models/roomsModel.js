@@ -204,14 +204,18 @@ export const checkInRoom = async (roomId, checkInTime = new Date().toISOString()
 
 /**
  * Check-Out a guest from a room by ID.
- * Sets check_out time and status = 'available' (using UTC timestamp).
+ * Resets guest and room related fields to NULL and sets status = 'available'.
  */
-export const checkOutRoom = async (roomId, checkOutTime = new Date().toISOString()) => {
+export const checkOutRoom = async (roomId) => {
   try {
     const { data, error } = await supabase
       .from('rooms')
       .update({
-        check_out: checkOutTime,
+        guest_id: null,
+        registration_time: null,
+        hours_stay: null,
+        check_in: null,
+        check_out: null,
         status: 'available',
       })
       .eq('id', roomId)
