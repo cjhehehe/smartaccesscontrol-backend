@@ -1,4 +1,5 @@
 // controllers/rfidController.js
+
 import {
   findRFIDByUID,
   getAllRFIDs,
@@ -310,7 +311,7 @@ export const updateRFIDStatus = async (req, res) => {
       });
     }
 
-    // 3) Update status based on the requested new status
+    // 3) Update status
     let updatedData = null;
     if (newStatus === 'available') {
       const { data, error } = await unassignRFID(rfid_uid);
@@ -363,7 +364,8 @@ export const updateRFIDStatus = async (req, res) => {
 
 /**
  * POST /api/rfid/verify
- * Production-grade verification logic that returns success only when a valid, non-expired room is assigned.
+ * Production-grade verification logic that returns success only when
+ * a valid, non-expired room is assigned.
  */
 export const verifyRFID = async (req, res) => {
   try {
@@ -392,6 +394,7 @@ export const verifyRFID = async (req, res) => {
     }
 
     // 2) Validate RFID status
+    // Must be 'assigned' or 'active' to proceed
     if (!['assigned', 'active'].includes(rfidData.status)) {
       return res.status(403).json({
         success: false,
@@ -421,7 +424,7 @@ export const verifyRFID = async (req, res) => {
       });
     }
 
-    // 4) Determine the target room. If not provided, auto-detect.
+    // 4) Determine the target room. If not provided, auto-detect among [reserved, occupied].
     let targetRoomNumber = room_number;
     if (!targetRoomNumber) {
       const { data: possibleRooms, error: fetchError } = await supabase
@@ -442,11 +445,11 @@ export const verifyRFID = async (req, res) => {
           message: 'No reserved/occupied room found for this guest.',
         });
       }
+      // --- CHANGED: Instead of returning 400, we just pick the first if multiple:
       if (possibleRooms.length > 1) {
-        return res.status(400).json({
-          success: false,
-          message: 'Multiple rooms found for this guest. Please specify a room_number.',
-        });
+        console.warn(
+          `[verifyRFID] Multiple rooms found for this guest. Auto-selecting the first: #${possibleRooms[0].room_number}`
+        );
       }
       targetRoomNumber = possibleRooms[0].room_number;
     }
@@ -470,13 +473,12 @@ export const verifyRFID = async (req, res) => {
       });
     }
 
-    // 6) Check timing based on room status
+    // 6) If the room is 'reserved', we update it to 'occupied' and set check_in, check_out
     if (roomData.status === 'occupied') {
+      // Optionally check if the check_out time has passed
       if (roomData.check_out) {
         const now = new Date();
         const checkOutTime = new Date(roomData.check_out);
-        console.log(`[verifyRFID] Current time: ${now.toISOString()}`);
-        console.log(`[verifyRFID] Room check_out time: ${checkOutTime.toISOString()}`);
         if (now.getTime() >= checkOutTime.getTime()) {
           console.log(`[verifyRFID] Room ${roomData.room_number} check_out time has passed. Denying access.`);
           return res.status(403).json({
@@ -487,7 +489,7 @@ export const verifyRFID = async (req, res) => {
         }
       }
     } else if (roomData.status === 'reserved') {
-      // Upgrade reserved room to occupied
+      // Upgrade reserved -> occupied
       const rawHours = roomData.hours_stay;
       let hoursStay = rawHours ? parseFloat(rawHours) : 0;
       if (isNaN(hoursStay) || hoursStay <= 0) {
@@ -516,7 +518,7 @@ export const verifyRFID = async (req, res) => {
       roomData = occupiedRoom;
     }
 
-    // 7) If RFID is still 'assigned', upgrade it to 'active'
+    // 7) If RFID is 'assigned', automatically activate it
     if (rfidData.status === 'assigned') {
       const { data: updatedRFID, error: activationError } = await activateRFID(rfid_uid);
       if (activationError) {
