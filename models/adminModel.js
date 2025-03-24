@@ -131,3 +131,30 @@ export async function deleteAdmin(adminId) {
     return { data: null, error: err };
   }
 }
+
+/**
+ * Fetches all admin IDs from the "admins" table.
+ * Returns an array of IDs or an empty array on error.
+ */
+export async function fetchAllAdminIds() {
+  try {
+    const { data, error } = await supabase
+      .from('admins')
+      .select('id');
+
+    if (error) {
+      console.error('[fetchAllAdminIds] Error fetching admin IDs:', error);
+      return [];
+    }
+
+    if (!data) {
+      return [];
+    }
+
+    // data is an array of objects like [{ id: 1 }, { id: 2 }, ...]
+    return data.map((admin) => admin.id);
+  } catch (err) {
+    console.error('[fetchAllAdminIds] Unexpected error:', err);
+    return [];
+  }
+}

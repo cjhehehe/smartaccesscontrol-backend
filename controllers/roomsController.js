@@ -12,6 +12,45 @@ import {
 } from '../models/roomsModel.js';
 import { createNotification } from '../models/notificationModel.js';
 
+// Import your adminModel helper
+import { fetchAllAdminIds } from '../models/adminModel.js';
+
+/**
+ * Helper to notify all admins by fetching all admin IDs from the DB
+ * and calling createNotification(...) for each admin.
+ */
+async function createNotificationForAllAdmins(
+  title,
+  message,
+  notificationType = 'room_status',
+  noteMessage = null
+) {
+  try {
+    const adminIds = await fetchAllAdminIds();
+    // If no admins found, just skip
+    if (!adminIds || adminIds.length === 0) {
+      console.warn('[Rooms] No admin IDs found. Skipping notifyAllAdmins...');
+      return;
+    }
+
+    // For each admin ID, create a notification
+    for (const adminId of adminIds) {
+      const { error: notifErr } = await createNotification({
+        recipient_admin_id: adminId,
+        title,
+        message,
+        note_message: noteMessage,
+        notification_type: notificationType,
+      });
+      if (notifErr) {
+        console.error('[Rooms] Error creating admin notification:', notifErr);
+      }
+    }
+  } catch (err) {
+    console.error('[Rooms] Could not notify all admins:', err);
+  }
+}
+
 /**
  * POST /api/rooms
  * Create a new room record with initial status = 'reserved'.
@@ -150,7 +189,9 @@ export const getRoom = async (req, res) => {
     const { data, error } = await getRoomById(id);
     if (error) {
       console.error('[Rooms] Error fetching room data:', error);
-      return res.status(500).json({ success: false, message: 'Database error: Error fetching room data', error });
+      return res
+        .status(500)
+        .json({ success: false, message: 'Database error: Error fetching room data', error });
     }
     if (!data) {
       return res.status(404).json({ success: false, message: 'Room not found' });
@@ -171,7 +212,9 @@ export const getRooms = async (req, res) => {
     const { data, error } = await getAllRooms();
     if (error) {
       console.error('[Rooms] Error fetching rooms:', error);
-      return res.status(500).json({ success: false, message: 'Database error: Error fetching rooms', error });
+      return res
+        .status(500)
+        .json({ success: false, message: 'Database error: Error fetching rooms', error });
     }
     return res.status(200).json({ success: true, data });
   } catch (error) {
@@ -189,7 +232,9 @@ export const modifyRoom = async (req, res) => {
     const { id } = req.params;
     const updateFields = req.body;
     if (!updateFields || Object.keys(updateFields).length === 0) {
-      return res.status(400).json({ success: false, message: 'No update fields provided.' });
+      return res
+        .status(400)
+        .json({ success: false, message: 'No update fields provided.' });
     }
     if (updateFields.hours_stay != null) {
       const numericHoursStay = parseFloat(updateFields.hours_stay);
@@ -205,7 +250,9 @@ export const modifyRoom = async (req, res) => {
     const { data, error } = await updateRoom(id, updateFields);
     if (error) {
       console.error('[Rooms] Error updating room data:', error);
-      return res.status(500).json({ success: false, message: 'Database error: Error updating room data', error });
+      return res
+        .status(500)
+        .json({ success: false, message: 'Database error: Error updating room data', error });
     }
     return res.status(200).json({
       success: true,
@@ -228,7 +275,9 @@ export const removeRoom = async (req, res) => {
     const { data, error } = await deleteRoom(id);
     if (error) {
       console.error('[Rooms] Error deleting room:', error);
-      return res.status(500).json({ success: false, message: 'Database error: Error deleting room', error });
+      return res
+        .status(500)
+        .json({ success: false, message: 'Database error: Error deleting room', error });
     }
     return res.status(200).json({ success: true, message: 'Room deleted successfully', data });
   } catch (error) {
@@ -239,7 +288,7 @@ export const removeRoom = async (req, res) => {
 
 /**
  * POST /api/rooms/:id/checkin
- * Check a guest into a room (set check_in time and status to 'occupied').
+ * Check a guest into a room (set check_in time and status = 'occupied').
  */
 export const roomCheckIn = async (req, res) => {
   try {
@@ -250,7 +299,9 @@ export const roomCheckIn = async (req, res) => {
     const { data, error } = await checkInRoom(id, checkInTime);
     if (error) {
       console.error('[Rooms] Error during check-in:', error);
-      return res.status(500).json({ success: false, message: 'Database error: Error during check-in', error });
+      return res
+        .status(500)
+        .json({ success: false, message: 'Database error: Error during check-in', error });
     }
     return res.status(200).json({ success: true, message: 'Check-in successful', data });
   } catch (error) {
@@ -261,19 +312,66 @@ export const roomCheckIn = async (req, res) => {
 
 /**
  * POST /api/rooms/:id/checkout
- * Check a guest out of a room (set check_out time and status to 'available').
+ * Check a guest out of a room (set check_out time and status = 'available').
+ * This is used for manual/early check-out.
  */
 export const roomCheckOut = async (req, res) => {
   try {
     const { id } = req.params;
     const checkOutTime = req.body.check_out || new Date().toISOString();
 
+    // 1) Perform the check-out in DB
     const { data, error } = await checkOutRoom(id, checkOutTime);
     if (error) {
       console.error('[Rooms] Error during check-out:', error);
-      return res.status(500).json({ success: false, message: 'Database error: Error during check-out', error });
+      return res.status(500).json({
+        success: false,
+        message: 'Database error: Error during check-out',
+        error,
+      });
     }
-    return res.status(200).json({ success: true, message: 'Check-out successful', data });
+    if (!data) {
+      return res
+        .status(404)
+        .json({ success: false, message: 'Room not found or could not be checked out.' });
+    }
+
+    // 2) If there's a guest assigned, notify them (Early Check-Out)
+    if (data.guest_id) {
+      try {
+        const notifTitle = 'Early Check-Out';
+        const notifMessage = `You have been checked out of Room #${data.room_number} early.`;
+
+        const { error: notifErr } = await createNotification({
+          recipient_guest_id: data.guest_id,
+          title: notifTitle,
+          message: notifMessage,
+          note_message: null,
+          notification_type: 'room_status',
+        });
+        if (notifErr) {
+          console.error('[Rooms] Failed to create occupant check-out notification:', notifErr);
+        }
+      } catch (notifyErr) {
+        console.error('[Rooms] Error sending occupant check-out notification:', notifyErr);
+      }
+    }
+
+    // 3) Notify all admins
+    try {
+      const adminTitle = 'Room Checked Out';
+      const adminMessage = `Room #${data.room_number} was checked out (ID: ${id}).`;
+      await createNotificationForAllAdmins(adminTitle, adminMessage, 'room_status');
+    } catch (adminNotifErr) {
+      console.error('[Rooms] Error sending admin check-out notification:', adminNotifErr);
+    }
+
+    // 4) Return success
+    return res.status(200).json({
+      success: true,
+      message: 'Check-out successful',
+      data,
+    });
   } catch (error) {
     console.error('[Rooms] Unexpected error in roomCheckOut:', error);
     return res.status(500).json({ success: false, message: 'Internal server error', error });
@@ -283,6 +381,7 @@ export const roomCheckOut = async (req, res) => {
 /**
  * PUT /api/rooms/:room_number/update-status
  * Update a room's status by room_number and, if applicable, notify the occupant.
+ * Also disallow changing from 'occupied' -> anything else unless the guest is checked out.
  */
 export const updateRoomStatusByNumber = async (req, res) => {
   try {
@@ -312,7 +411,15 @@ export const updateRoomStatusByNumber = async (req, res) => {
       });
     }
 
-    // 2) Update the room record with new status
+    // 2) Disallow Occupied -> anything else, unless checked out
+    if (existingRoom.status === 'occupied' && status !== 'occupied') {
+      return res.status(400).json({
+        success: false,
+        message: `Room #${room_number} is Occupied. Please check out the guest before changing status to ${status}.`,
+      });
+    }
+
+    // 3) Update the room record with new status
     const { data: updatedRoom, error: updateError } = await updateRoomByNumber(
       room_number,
       { status }
@@ -332,7 +439,7 @@ export const updateRoomStatusByNumber = async (req, res) => {
       });
     }
 
-    // 3) If a guest is assigned, send a notification about the status update
+    // 4) If a guest is assigned, send a notification about the status update
     if (updatedRoom.guest_id) {
       try {
         let statusLabel = status;
@@ -358,6 +465,7 @@ export const updateRoomStatusByNumber = async (req, res) => {
       }
     }
 
+    // 5) Return success
     return res.status(200).json({
       success: true,
       message: `Room #${room_number} status updated to ${status}.`,
