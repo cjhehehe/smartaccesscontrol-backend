@@ -167,6 +167,7 @@ export const unassignRFID = async (rfid_uid) => {
 
 /**
  * Reset all RFID tags for a specific guest to 'available' if they are 'active' or 'assigned'.
+ * This clears the guest_id and updates the status.
  */
 export const resetRFIDByGuest = async (guest_id) => {
   try {

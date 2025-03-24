@@ -11,7 +11,7 @@ import {
   findRoomByNumber,
 } from '../models/roomsModel.js';
 import { createNotification } from '../models/notificationModel.js';
-import { resetRFIDByGuest } from '../models/rfidModel.js'; // Import for resetting RFID status
+import { resetRFIDByGuest } from '../models/rfidModel.js'; // For resetting RFID status
 import { fetchAllAdminIds } from '../models/adminModel.js';
 
 /**
@@ -182,9 +182,11 @@ export const getRoom = async (req, res) => {
     const { data, error } = await getRoomById(id);
     if (error) {
       console.error('[Rooms] Error fetching room data:', error);
-      return res
-        .status(500)
-        .json({ success: false, message: 'Database error: Error fetching room data', error });
+      return res.status(500).json({ 
+        success: false, 
+        message: 'Database error: Error fetching room data', 
+        error 
+      });
     }
     if (!data) {
       return res.status(404).json({ success: false, message: 'Room not found' });
@@ -205,9 +207,11 @@ export const getRooms = async (req, res) => {
     const { data, error } = await getAllRooms();
     if (error) {
       console.error('[Rooms] Error fetching rooms:', error);
-      return res
-        .status(500)
-        .json({ success: false, message: 'Database error: Error fetching rooms', error });
+      return res.status(500).json({ 
+        success: false, 
+        message: 'Database error: Error fetching rooms', 
+        error 
+      });
     }
     return res.status(200).json({ success: true, data });
   } catch (error) {
@@ -225,9 +229,7 @@ export const modifyRoom = async (req, res) => {
     const { id } = req.params;
     const updateFields = req.body;
     if (!updateFields || Object.keys(updateFields).length === 0) {
-      return res
-        .status(400)
-        .json({ success: false, message: 'No update fields provided.' });
+      return res.status(400).json({ success: false, message: 'No update fields provided.' });
     }
     if (updateFields.hours_stay != null) {
       const numericHoursStay = parseFloat(updateFields.hours_stay);
@@ -243,15 +245,13 @@ export const modifyRoom = async (req, res) => {
     const { data, error } = await updateRoom(id, updateFields);
     if (error) {
       console.error('[Rooms] Error updating room data:', error);
-      return res
-        .status(500)
-        .json({ success: false, message: 'Database error: Error updating room data', error });
+      return res.status(500).json({ 
+        success: false, 
+        message: 'Database error: Error updating room data', 
+        error 
+      });
     }
-    return res.status(200).json({
-      success: true,
-      message: 'Room updated successfully',
-      data,
-    });
+    return res.status(200).json({ success: true, message: 'Room updated successfully', data });
   } catch (error) {
     console.error('[Rooms] Unexpected error in modifyRoom:', error);
     return res.status(500).json({ success: false, message: 'Internal server error', error });
@@ -268,9 +268,11 @@ export const removeRoom = async (req, res) => {
     const { data, error } = await deleteRoom(id);
     if (error) {
       console.error('[Rooms] Error deleting room:', error);
-      return res
-        .status(500)
-        .json({ success: false, message: 'Database error: Error deleting room', error });
+      return res.status(500).json({ 
+        success: false, 
+        message: 'Database error: Error deleting room', 
+        error 
+      });
     }
     return res.status(200).json({ success: true, message: 'Room deleted successfully', data });
   } catch (error) {
@@ -291,9 +293,11 @@ export const roomCheckIn = async (req, res) => {
     const { data, error } = await checkInRoom(id, checkInTime);
     if (error) {
       console.error('[Rooms] Error during check-in:', error);
-      return res
-        .status(500)
-        .json({ success: false, message: 'Database error: Error during check-in', error });
+      return res.status(500).json({ 
+        success: false, 
+        message: 'Database error: Error during check-in', 
+        error 
+      });
     }
     return res.status(200).json({ success: true, message: 'Check-in successful', data });
   } catch (error) {
@@ -305,7 +309,7 @@ export const roomCheckIn = async (req, res) => {
 /**
  * POST /api/rooms/:id/checkout
  * Check a guest out of a room (reset guest and room related fields to NULL and set status = 'available').
- * On check-out, the guest’s RFID card is also reset (status changed to 'available').
+ * On check-out, the guest’s RFID card is also reset (status changed to 'available' and guest_id cleared).
  */
 export const roomCheckOut = async (req, res) => {
   try {
@@ -326,7 +330,7 @@ export const roomCheckOut = async (req, res) => {
     const currentGuestId = roomData.guest_id;
     const roomNumber = roomData.room_number;
 
-    // Update the room record: reset guest_id, registration_time, hours_stay, check_in, and check_out; set status to 'available'
+    // Update the room record: reset guest_id, registration_time, hours_stay, check_in, check_out; set status to 'available'
     const { data, error } = await checkOutRoom(id);
     if (error) {
       console.error('[Rooms] Error during check-out:', error);
@@ -358,7 +362,7 @@ export const roomCheckOut = async (req, res) => {
         if (notifErr) {
           console.error('[Rooms] Failed to create occupant check-out notification:', notifErr);
         }
-        // Reset the RFID card for the guest (set status to 'available')
+        // Reset the RFID card for the guest (set status to 'available' and guest_id to null)
         const { data: resetData, error: resetError } = await resetRFIDByGuest(currentGuestId);
         if (resetError) {
           console.error('[Rooms] Error resetting RFID for guest:', resetError);

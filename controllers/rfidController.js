@@ -311,7 +311,7 @@ export const updateRFIDStatus = async (req, res) => {
       });
     }
 
-    // 3) Update status
+    // 3) Update status based on newStatus
     let updatedData = null;
     if (newStatus === 'available') {
       const { data, error } = await unassignRFID(rfid_uid);
@@ -394,7 +394,6 @@ export const verifyRFID = async (req, res) => {
     }
 
     // 2) Validate RFID status
-    // Must be 'assigned' or 'active' to proceed
     if (!['assigned', 'active'].includes(rfidData.status)) {
       return res.status(403).json({
         success: false,
@@ -424,7 +423,7 @@ export const verifyRFID = async (req, res) => {
       });
     }
 
-    // 4) Determine which room to check. If not provided, auto-detect among [reserved, occupied].
+    // 4) Determine which room to check. If not provided, auto-detect among reserved/occupied.
     let targetRoomNumber = room_number;
     if (!targetRoomNumber) {
       const { data: possibleRooms, error: fetchError } = await supabase
@@ -445,7 +444,6 @@ export const verifyRFID = async (req, res) => {
           message: 'No reserved/occupied room found for this guest.',
         });
       }
-      // If multiple, pick the first
       if (possibleRooms.length > 1) {
         console.warn(
           `[verifyRFID] Multiple rooms found for this guest. Auto-selecting the first: #${possibleRooms[0].room_number}`
@@ -481,10 +479,8 @@ export const verifyRFID = async (req, res) => {
         console.warn(`[verifyRFID] Invalid hours_stay (${rawHours}). Defaulting to 1 hour.`);
         hoursStay = 1;
       }
-
       const checkInTime = new Date();
       const checkOutTime = new Date(checkInTime.getTime() + hoursStay * 60 * 60 * 1000);
-
       console.log(`[verifyRFID] Upgrading room ${roomData.room_number} from 'reserved' to 'occupied'.`);
       const { data: occupiedRoom, error: checkInError } = await supabase
         .from('rooms')
@@ -505,7 +501,6 @@ export const verifyRFID = async (req, res) => {
       }
       roomData = occupiedRoom;
     } else if (roomData.status === 'occupied') {
-      // Optionally check if the check_out time has passed
       if (roomData.check_out) {
         const now = new Date();
         const checkOutTime = new Date(roomData.check_out);
@@ -533,7 +528,7 @@ export const verifyRFID = async (req, res) => {
       rfidData = updatedRFID;
     }
 
-    // 8) Return final data (room now 'occupied' if needed, RFID 'active' if needed)
+    // 8) Return final data
     return res.status(200).json({
       success: true,
       message: 'RFID verified successfully.',
