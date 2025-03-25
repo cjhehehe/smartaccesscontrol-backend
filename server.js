@@ -23,6 +23,9 @@ import mikrotikRoutes from './routes/mikrotikRoutes.js';
 // NEW: Import the reset routes
 import resetRoutes from './routes/resetRoutes.js';
 
+// NEW: Import the cron job
+import './cronJobs.js'; // <--- This ensures the cron job file is loaded and starts running.
+
 import { errorHandler } from './middlewares/errorHandler.js';
 
 dotenv.config();
@@ -47,7 +50,7 @@ app.use('/api/access-logs', accessLogRoutes);
 app.use('/api/activity-logs', activityLogRoutes);
 app.use('/api/feedback', feedbackRoutes);
 
-// Notifications routes (including the new endpoints)
+// Notifications routes
 app.use('/api/notifications', notificationRoutes);
 
 app.use('/api/mac-address', macAddressRoutes);

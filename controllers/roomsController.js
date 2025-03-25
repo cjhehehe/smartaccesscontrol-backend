@@ -6,46 +6,18 @@ import {
   updateRoom,
   deleteRoom,
   checkInRoom,
-  checkOutRoom,
   updateRoomByNumber,
   findRoomByNumber,
+  // Instead of calling checkOutRoom directly, we'll call checkOutRoomById (unified logic)
+  checkOutRoomById,
 } from '../models/roomsModel.js';
-import { createNotification } from '../models/notificationModel.js';
-import { resetRFIDByGuest } from '../models/rfidModel.js'; // For resetting RFID status
-import { fetchAllAdminIds } from '../models/adminModel.js';
 
 /**
  * Helper to notify all admins by fetching all admin IDs from the DB
  * and calling createNotification(...) for each admin.
+ * (You can keep this here if you want, or move it into roomsModel.js,
+ *  but it’s not strictly necessary if you do it inside checkOutRoomById.)
  */
-async function createNotificationForAllAdmins(
-  title,
-  message,
-  notificationType = 'room_status',
-  noteMessage = null
-) {
-  try {
-    const adminIds = await fetchAllAdminIds();
-    if (!adminIds || adminIds.length === 0) {
-      console.warn('[Rooms] No admin IDs found. Skipping notifyAllAdmins...');
-      return;
-    }
-    for (const adminId of adminIds) {
-      const { error: notifErr } = await createNotification({
-        recipient_admin_id: adminId,
-        title,
-        message,
-        note_message: noteMessage,
-        notification_type: notificationType,
-      });
-      if (notifErr) {
-        console.error('[Rooms] Error creating admin notification:', notifErr);
-      }
-    }
-  } catch (err) {
-    console.error('[Rooms] Could not notify all admins:', err);
-  }
-}
 
 /**
  * POST /api/rooms
@@ -69,6 +41,7 @@ export const addRoom = async (req, res) => {
       });
     }
 
+    // Check if the room_number already exists
     const { data: existingRoom, error: findError } = await findRoomByNumber(room_number);
     if (findError) {
       console.error('[Rooms] Error checking existing room:', findError);
@@ -182,10 +155,10 @@ export const getRoom = async (req, res) => {
     const { data, error } = await getRoomById(id);
     if (error) {
       console.error('[Rooms] Error fetching room data:', error);
-      return res.status(500).json({ 
-        success: false, 
-        message: 'Database error: Error fetching room data', 
-        error 
+      return res.status(500).json({
+        success: false,
+        message: 'Database error: Error fetching room data',
+        error,
       });
     }
     if (!data) {
@@ -207,10 +180,10 @@ export const getRooms = async (req, res) => {
     const { data, error } = await getAllRooms();
     if (error) {
       console.error('[Rooms] Error fetching rooms:', error);
-      return res.status(500).json({ 
-        success: false, 
-        message: 'Database error: Error fetching rooms', 
-        error 
+      return res.status(500).json({
+        success: false,
+        message: 'Database error: Error fetching rooms',
+        error,
       });
     }
     return res.status(200).json({ success: true, data });
@@ -245,10 +218,10 @@ export const modifyRoom = async (req, res) => {
     const { data, error } = await updateRoom(id, updateFields);
     if (error) {
       console.error('[Rooms] Error updating room data:', error);
-      return res.status(500).json({ 
-        success: false, 
-        message: 'Database error: Error updating room data', 
-        error 
+      return res.status(500).json({
+        success: false,
+        message: 'Database error: Error updating room data',
+        error,
       });
     }
     return res.status(200).json({ success: true, message: 'Room updated successfully', data });
@@ -268,10 +241,10 @@ export const removeRoom = async (req, res) => {
     const { data, error } = await deleteRoom(id);
     if (error) {
       console.error('[Rooms] Error deleting room:', error);
-      return res.status(500).json({ 
-        success: false, 
-        message: 'Database error: Error deleting room', 
-        error 
+      return res.status(500).json({
+        success: false,
+        message: 'Database error: Error deleting room',
+        error,
       });
     }
     return res.status(200).json({ success: true, message: 'Room deleted successfully', data });
@@ -293,10 +266,10 @@ export const roomCheckIn = async (req, res) => {
     const { data, error } = await checkInRoom(id, checkInTime);
     if (error) {
       console.error('[Rooms] Error during check-in:', error);
-      return res.status(500).json({ 
-        success: false, 
-        message: 'Database error: Error during check-in', 
-        error 
+      return res.status(500).json({
+        success: false,
+        message: 'Database error: Error during check-in',
+        error,
       });
     }
     return res.status(200).json({ success: true, message: 'Check-in successful', data });
@@ -308,83 +281,31 @@ export const roomCheckIn = async (req, res) => {
 
 /**
  * POST /api/rooms/:id/checkout
- * Check a guest out of a room (reset guest and room related fields to NULL and set status = 'available').
- * On check-out, the guest’s RFID card is also reset (status changed to 'available' and guest_id cleared).
+ * Check a guest out of a room by ID (sets occupant fields to NULL, sets status to 'available',
+ * resets RFID, and notifies occupant + admins). We call checkOutRoomById(...) from the model
+ * so it matches the same logic used by the cron job.
  */
 export const roomCheckOut = async (req, res) => {
   try {
     const { id } = req.params;
-    // Fetch current room record to get guest_id and room_number
-    const { data: roomData, error: roomFetchError } = await getRoomById(id);
-    if (roomFetchError) {
-      console.error('[Rooms] Error fetching room data:', roomFetchError);
-      return res.status(500).json({
-        success: false,
-        message: 'Database error: Error fetching room data',
-        error: roomFetchError.message,
-      });
-    }
-    if (!roomData) {
-      return res.status(404).json({ success: false, message: 'Room not found' });
-    }
-    const currentGuestId = roomData.guest_id;
-    const roomNumber = roomData.room_number;
-
-    // Update the room record: reset guest_id, registration_time, hours_stay, check_in, check_out; set status to 'available'
-    const { data, error } = await checkOutRoom(id);
-    if (error) {
-      console.error('[Rooms] Error during check-out:', error);
+    // We'll pass "Early Check-Out" as the reason to differentiate from auto-checkout
+    const result = await checkOutRoomById(id, 'Early Check-Out');
+    if (!result.success) {
+      console.error('[Rooms] Error during check-out:', result.error);
+      if (result.error?.message?.includes('Room not found')) {
+        return res.status(404).json({ success: false, message: 'Room not found' });
+      }
       return res.status(500).json({
         success: false,
         message: 'Database error: Error during check-out',
-        error,
+        error: result.error,
       });
-    }
-    if (!data) {
-      return res.status(404).json({
-        success: false,
-        message: 'Room not found or could not be checked out.',
-      });
-    }
-
-    // If a guest was assigned, notify them and reset their RFID card status
-    if (currentGuestId) {
-      try {
-        const notifTitle = 'Early Check-Out';
-        const notifMessage = `You have been checked out of Room #${roomNumber} early.`;
-        const { error: notifErr } = await createNotification({
-          recipient_guest_id: currentGuestId,
-          title: notifTitle,
-          message: notifMessage,
-          note_message: null,
-          notification_type: 'room_status',
-        });
-        if (notifErr) {
-          console.error('[Rooms] Failed to create occupant check-out notification:', notifErr);
-        }
-        // Reset the RFID card for the guest (set status to 'available' and guest_id to null)
-        const { data: resetData, error: resetError } = await resetRFIDByGuest(currentGuestId);
-        if (resetError) {
-          console.error('[Rooms] Error resetting RFID for guest:', resetError);
-        }
-      } catch (notifyErr) {
-        console.error('[Rooms] Error handling guest notifications during checkout:', notifyErr);
-      }
-    }
-
-    // Notify all admins about the check-out.
-    try {
-      const adminTitle = 'Room Checked Out';
-      const adminMessage = `Room #${roomNumber} was checked out (ID: ${id}).`;
-      await createNotificationForAllAdmins(adminTitle, adminMessage, 'room_status');
-    } catch (adminNotifErr) {
-      console.error('[Rooms] Error sending admin check-out notification:', adminNotifErr);
     }
 
     return res.status(200).json({
       success: true,
       message: 'Check-out successful',
-      data,
+      data: result.data,
     });
   } catch (error) {
     console.error('[Rooms] Unexpected error in roomCheckOut:', error);
@@ -450,6 +371,7 @@ export const updateRoomStatusByNumber = async (req, res) => {
       });
     }
 
+    // If there's an occupant, optionally notify them
     if (updatedRoom.guest_id) {
       try {
         let statusLabel = status;
@@ -460,16 +382,13 @@ export const updateRoomStatusByNumber = async (req, res) => {
 
         const notifTitle = 'Room Status Updated';
         const notifMessage = `Your room #${room_number} is now ${statusLabel}.`;
-        const { error: notifError } = await createNotification({
+        await createNotification({
           recipient_guest_id: updatedRoom.guest_id,
           title: notifTitle,
           message: notifMessage,
           note_message: note || null,
           notification_type: 'room_status',
         });
-        if (notifError) {
-          console.error('[Rooms] Failed to create occupant notification:', notifError);
-        }
       } catch (notifCatchErr) {
         console.error('[Rooms] Unexpected error creating occupant notification:', notifCatchErr);
       }

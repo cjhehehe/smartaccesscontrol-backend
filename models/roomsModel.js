@@ -1,5 +1,8 @@
 // models/roomsModel.js
 import supabase from '../config/supabase.js';
+import { createNotification } from './notificationModel.js';
+import { resetRFIDByGuest } from './rfidModel.js';
+import { fetchAllAdminIds } from './adminModel.js';
 
 /**
  * Create a new room record in the 'rooms' table.
@@ -203,8 +206,9 @@ export const checkInRoom = async (roomId, checkInTime = new Date().toISOString()
 };
 
 /**
- * Check-Out a guest from a room by ID.
+ * Check-Out a guest from a room by ID (low-level).
  * Resets guest and room related fields to NULL and sets status = 'available'.
+ * This does NOT send notifications or reset RFID. It's a basic DB update.
  */
 export const checkOutRoom = async (roomId) => {
   try {
@@ -228,5 +232,106 @@ export const checkOutRoom = async (roomId) => {
   } catch (err) {
     console.error('[RoomsModel] Unexpected error in checkOutRoom:', err);
     return { data: null, error: err };
+  }
+};
+
+/**
+ * Helper: Notify all admins with a single message.
+ */
+async function notifyAllAdmins(title, message, notificationType = 'room_status', noteMessage = null) {
+  try {
+    const adminIds = await fetchAllAdminIds();
+    if (!adminIds || adminIds.length === 0) {
+      console.warn('[RoomsModel] No admin IDs found. Skipping notifyAllAdmins...');
+      return;
+    }
+    for (const adminId of adminIds) {
+      await createNotification({
+        recipient_admin_id: adminId,
+        title,
+        message,
+        note_message: noteMessage,
+        notification_type: notificationType,
+      });
+    }
+  } catch (err) {
+    console.error('[RoomsModel] Could not notify all admins:', err);
+  }
+}
+
+/**
+ * checkOutRoomById:
+ * 1) Fetch the room
+ * 2) Clear occupant fields in DB (via checkOutRoom)
+ * 3) If occupant present, reset RFID & notify occupant
+ * 4) Notify all admins
+ * 
+ * 'reason' can be "Early Check-Out" or "Automatic Checkout" to differentiate.
+ */
+export const checkOutRoomById = async (roomId, reason = 'Automatic Checkout') => {
+  try {
+    // 1) fetch the current room record
+    const { data: roomData, error: fetchError } = await getRoomById(roomId);
+    if (fetchError) {
+      console.error('[RoomsModel] Error fetching room data:', fetchError);
+      return { success: false, error: fetchError };
+    }
+    if (!roomData) {
+      return { success: false, error: new Error('Room not found') };
+    }
+
+    const currentGuestId = roomData.guest_id;
+    const roomNumber = roomData.room_number;
+
+    // 2) Clear occupant fields in the DB
+    const { data: updatedRoom, error: updateError } = await checkOutRoom(roomId);
+    if (updateError) {
+      console.error('[RoomsModel] Error during check-out:', updateError);
+      return { success: false, error: updateError };
+    }
+    if (!updatedRoom) {
+      return { success: false, error: new Error('Room not found or could not be checked out') };
+    }
+
+    // 3) If occupant was present, reset RFID and notify occupant
+    if (currentGuestId) {
+      // occupant notification
+      try {
+        const notifTitle = reason;
+        const notifMessage = `You have been checked out of Room #${roomNumber}.`;
+        const { error: occupantNotifErr } = await createNotification({
+          recipient_guest_id: currentGuestId,
+          title: notifTitle,
+          message: notifMessage,
+          notification_type: 'room_status',
+        });
+        if (occupantNotifErr) {
+          console.error('[RoomsModel] Failed to create occupant check-out notification:', occupantNotifErr);
+        }
+
+        // Reset the RFID card for the guest
+        const { error: resetError } = await resetRFIDByGuest(currentGuestId);
+        if (resetError) {
+          console.error('[RoomsModel] Error resetting RFID for guest:', resetError);
+        }
+      } catch (notifyErr) {
+        console.error('[RoomsModel] Error handling guest notifications during checkout:', notifyErr);
+      }
+    }
+
+    // 4) Notify all admins
+    try {
+      const adminTitle = 'Room Checked Out';
+      const adminMessage = `Room #${roomNumber} was checked out (ID: ${roomId}). Reason: ${reason}.`;
+      await notifyAllAdmins(adminTitle, adminMessage, 'room_status');
+    } catch (adminNotifErr) {
+      console.error('[RoomsModel] Error sending admin check-out notification:', adminNotifErr);
+    }
+
+    // Return success
+    return { success: true, data: updatedRoom };
+  } catch (err) {
+    console.error('[RoomsModel] Unexpected error in checkOutRoomById:', err);
+    return { success: false, error: err };
   }
 };

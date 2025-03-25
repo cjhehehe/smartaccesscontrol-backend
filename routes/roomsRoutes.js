@@ -38,10 +38,10 @@ router.delete('/:id', removeRoom);
 // Check-In endpoint: sets check_in time and status='occupied'
 router.post('/:id/checkin', roomCheckIn);
 
-// Check-Out endpoint: sets check_out time and status='available'
+// Check-Out endpoint: sets occupant fields to NULL, status='available'
 router.post('/:id/checkout', roomCheckOut);
 
-// NEW: Update room status by room_number (similar to service-requests/ID/update-status)
+// Update room status by room_number
 router.put('/:room_number/update-status', updateRoomStatusByNumber);
 
 export default router;
