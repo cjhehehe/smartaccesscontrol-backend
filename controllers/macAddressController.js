@@ -1,5 +1,6 @@
 // controllers/macAddressController.js
 import supabase from '../config/supabase.js';
+import { upsertMacAddress } from '../models/macAddressModel.js';
 
 /**
  * GET /api/mac-address/all
@@ -82,7 +83,7 @@ export const authenticateMacAddress = async (req, res) => {
       });
     }
 
-    // Update status -> 'authenticated'
+    // Attempt to update the existing record
     const { data, error } = await supabase
       .from('mac_addresses')
       .update({ status: 'authenticated' })
@@ -132,7 +133,7 @@ export const deauthenticateMacAddress = async (req, res) => {
       });
     }
 
-    // Update status -> 'unauthenticated'
+    // Attempt to update the existing record
     const { data, error } = await supabase
       .from('mac_addresses')
       .update({ status: 'unauthenticated' })
@@ -170,7 +171,9 @@ export const deauthenticateMacAddress = async (req, res) => {
 
 /**
  * PUT /api/mac-address/update-status
- * Unified method to update MAC address status (e.g. "authenticated", "unauthenticated", "blocked", etc.)
+ * Upsert logic to set MAC address status (e.g. "authenticated", "unauthenticated", "blocked", etc.).
+ * If the MAC doesn't exist, creates a new record with the given status.
+ * If it exists, updates that record.
  */
 export const updateMacAddressStatus = async (req, res) => {
   try {
@@ -182,31 +185,19 @@ export const updateMacAddressStatus = async (req, res) => {
       });
     }
 
-    // Update the status
-    const { data, error } = await supabase
-      .from('mac_addresses')
-      .update({ status })
-      .eq('mac_address', mac_address)
-      .select()
-      .single();
-
+    // Perform an upsert (create if not found, update if existing)
+    const { data, error } = await upsertMacAddress(mac_address, status);
     if (error) {
-      console.error('[updateMacAddressStatus] Database error:', error);
+      console.error('[updateMacAddressStatus] upsert error:', error);
       return res.status(500).json({
         success: false,
-        message: 'Database error: Unable to update MAC address status.',
-      });
-    }
-    if (!data) {
-      return res.status(404).json({
-        success: false,
-        message: `MAC address ${mac_address} not found.`,
+        message: 'Database error: Unable to upsert MAC address status.',
       });
     }
 
     return res.status(200).json({
       success: true,
-      message: `MAC address ${mac_address} status updated to '${status}'.`,
+      message: `MAC address ${mac_address} status set to '${status}'.`,
       data,
     });
   } catch (error) {
@@ -220,7 +211,7 @@ export const updateMacAddressStatus = async (req, res) => {
 
 /**
  * POST /api/mac-address/verify
- * Check if a MAC address is valid and "authenticated" (for advanced use, tie in room/hours_stay logic).
+ * Check if a MAC address is valid and "authenticated".
  */
 export const verifyMacAddress = async (req, res) => {
   try {
@@ -261,7 +252,7 @@ export const verifyMacAddress = async (req, res) => {
       });
     }
 
-    // (Optional) Add logic to check if hours_stay has expired or if there's a "check_out" time
+    // Additional validation logic can go here (room checkout times, etc.)
 
     return res.status(200).json({
       success: true,

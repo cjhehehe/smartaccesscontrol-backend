@@ -1,5 +1,4 @@
 // models/macAddressModel.js
-
 import supabase from '../config/supabase.js';
 
 /**
@@ -16,7 +15,7 @@ export const saveMacAddress = async ({
 }) => {
   try {
     const payload = {
-      mac,
+      mac_address: mac,  // note the DB column is "mac_address"
       ip,
       status: status || 'pending',
       created_at: created_at || new Date().toISOString()
@@ -42,57 +41,37 @@ export const saveMacAddress = async ({
 };
 
 /**
- * Check if MAC already exists.
- * Returns true if found, false otherwise.
+ * Check if a MAC record already exists.
+ * Returns the existing row if found, null otherwise.
  */
-export const checkExistingMac = async (mac) => {
+export const findMacRecord = async (mac) => {
   try {
     const { data, error } = await supabase
       .from('mac_addresses')
-      .select('id')
-      .eq('mac', mac)
+      .select('*')
+      .eq('mac_address', mac)
       .maybeSingle();
 
     if (error) {
-      console.error('[MAC Model] Error checking existing MAC:', error);
-      return false;
+      console.error('[MAC Model] Error finding MAC record:', error);
+      return null;
     }
-    return !!data; // true if data is not null, false if null
+    return data; // either an object or null
   } catch (err) {
-    console.error('[MAC Model] Unexpected error in checkExistingMac:', err);
-    return false;
+    console.error('[MAC Model] Unexpected error in findMacRecord:', err);
+    return null;
   }
 };
 
 /**
- * Get all whitelisted MAC addresses (e.g. where status = 'connected' or 'whitelisted').
- */
-export const getWhitelistedMacs = async () => {
-  try {
-    const { data, error } = await supabase
-      .from('mac_addresses')
-      .select('mac')
-      .eq('status', 'connected'); // Adjust as needed
-    if (error) {
-      console.error('[MAC Model] Error fetching whitelisted MACs:', error);
-      return { data: null, error };
-    }
-    return { data, error: null };
-  } catch (err) {
-    console.error('[MAC Model] Unexpected error in getWhitelistedMacs:', err);
-    return { data: null, error: err };
-  }
-};
-
-/**
- * Update the status of a MAC record.
+ * Update the status of an existing MAC record.
  */
 export const updateMacStatus = async (mac, status) => {
   try {
     const { data, error } = await supabase
       .from('mac_addresses')
       .update({ status })
-      .eq('mac', mac)
+      .eq('mac_address', mac)
       .select()
       .single();
     if (error) {
@@ -105,6 +84,47 @@ export const updateMacStatus = async (mac, status) => {
     return { data, error: null };
   } catch (err) {
     console.error('[MAC Model] Unexpected error in updateMacStatus:', err);
+    return { data: null, error: err };
+  }
+};
+
+/**
+ * Upsert logic: If MAC doesn't exist, create it with the given status.
+ * If it does exist, update the status.
+ */
+export const upsertMacAddress = async (mac, status) => {
+  try {
+    // 1) Check if record exists
+    const existingRecord = await findMacRecord(mac);
+    if (!existingRecord) {
+      // 2) Insert as a new record
+      const { data, error } = await supabase
+        .from('mac_addresses')
+        .insert([{ mac_address: mac, status }])
+        .select()
+        .single();
+
+      if (error) {
+        console.error('[MAC Model] Error inserting new MAC record:', error);
+        return { data: null, error };
+      }
+      return { data, error: null };
+    } else {
+      // 3) Update existing record
+      const { data, error } = await supabase
+        .from('mac_addresses')
+        .update({ status })
+        .eq('mac_address', mac)
+        .select()
+        .single();
+      if (error) {
+        console.error('[MAC Model] Error updating existing MAC record:', error);
+        return { data: null, error };
+      }
+      return { data, error: null };
+    }
+  } catch (err) {
+    console.error('[MAC Model] Unexpected error in upsertMacAddress:', err);
     return { data: null, error: err };
   }
 };

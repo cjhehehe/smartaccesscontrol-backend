@@ -48,7 +48,7 @@ export const storeConnectedDevices = async (req, res) => {
       const macAddress = host['mac-address'];
       if (!macAddress) continue;
 
-      // Check if we already have this MAC in our DB
+      // Check if this MAC exists in DB
       const { data: existing, error: fetchError } = await supabase
         .from('mac_addresses')
         .select('mac_address')
@@ -58,6 +58,7 @@ export const storeConnectedDevices = async (req, res) => {
         console.error(`Error checking MAC ${macAddress}:`, fetchError);
         continue;
       }
+
       // If not in DB, insert with default status: 'unauthenticated'
       if (!existing || existing.length === 0) {
         const { error: insertError } = await supabase
@@ -112,7 +113,7 @@ export const syncMikrotikStatus = async (req, res) => {
     const hotspotUser = login.menu('/ip/hotspot/user');
 
     // For demonstration, clear all existing hotspot users.
-    // In production you might update only the relevant entries.
+    // In production, you might selectively update only relevant entries.
     const existingUsers = await hotspotUser.getAll();
     for (const usr of existingUsers) {
       await hotspotUser.remove({ '.id': usr['.id'] });
@@ -122,7 +123,7 @@ export const syncMikrotikStatus = async (req, res) => {
     for (const item of authenticatedMacs) {
       await hotspotUser.add({
         name: item.mac_address,
-        password: item.mac_address,  // Using MAC as password (can be randomized if desired)
+        password: item.mac_address, // Using MAC as password (could be randomized)
         profile: 'with_internet'
       });
     }
