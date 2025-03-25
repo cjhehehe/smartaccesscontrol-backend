@@ -274,14 +274,14 @@ export const roomCheckIn = async (req, res) => {
 
 /**
  * POST /api/rooms/:id/checkout
- * Check a guest out of a room by ID (sets occupant fields to NULL, sets status to 'available',
- * resets RFID, and notifies occupant + admins). We call checkOutRoomById(...) from the model
- * so it matches the same logic used by the cron job.
+ * Check a guest out of a room by ID.
+ * Clears occupant fields, sets status to 'available', resets RFID, and notifies occupant + admins.
+ * Uses checkOutRoomById to ensure unified logic for both manual and automatic checkout.
  */
 export const roomCheckOut = async (req, res) => {
   try {
     const { id } = req.params;
-    // We'll pass "Early Check-Out" as the reason to differentiate from auto-checkout
+    // Pass "Early Check-Out" as the reason to differentiate from auto-checkout.
     const result = await checkOutRoomById(id, 'Early Check-Out');
     if (!result.success) {
       console.error('[Rooms] Error during check-out:', result.error);
@@ -364,7 +364,7 @@ export const updateRoomStatusByNumber = async (req, res) => {
       });
     }
 
-    // If there's an occupant, optionally notify them
+    // If there's an occupant, optionally notify them.
     if (updatedRoom.guest_id) {
       try {
         let statusLabel = status;
