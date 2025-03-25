@@ -252,8 +252,6 @@ export const verifyMacAddress = async (req, res) => {
       });
     }
 
-    // Additional validation logic can go here (room checkout times, etc.)
-
     return res.status(200).json({
       success: true,
       message: `MAC address ${mac_address} is authenticated and valid.`,

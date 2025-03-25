@@ -4,7 +4,7 @@ import supabase from '../config/supabase.js';
 
 const MIKROTIK_IP = process.env.MIKROTIK_IP || '192.168.88.1';
 const MIKROTIK_USER = process.env.MIKROTIK_USER || 'api_user';
-const MIKROTIK_PASS = process.env.MIKROTIK_PASS || 'strong_api_password';
+const MIKROTIK_PASSWORD = process.env.MIKROTIK_PASSWORD || 'strong_api_password';
 
 /**
  * GET /api/mikrotik/connected
@@ -14,7 +14,7 @@ const MIKROTIK_PASS = process.env.MIKROTIK_PASS || 'strong_api_password';
 export const getConnectedDevices = async (req, res) => {
   try {
     const device = new MikroNode(MIKROTIK_IP);
-    const [login] = await device.connect(MIKROTIK_USER, MIKROTIK_PASS);
+    const [login] = await device.connect(MIKROTIK_USER, MIKROTIK_PASSWORD);
     const hotspotHost = login.menu('/ip/hotspot/host');
     const hosts = await hotspotHost.getAll();
 
@@ -40,7 +40,7 @@ export const getConnectedDevices = async (req, res) => {
 export const storeConnectedDevices = async (req, res) => {
   try {
     const device = new MikroNode(MIKROTIK_IP);
-    const [login] = await device.connect(MIKROTIK_USER, MIKROTIK_PASS);
+    const [login] = await device.connect(MIKROTIK_USER, MIKROTIK_PASSWORD);
     const hotspotHost = login.menu('/ip/hotspot/host');
     const hosts = await hotspotHost.getAll();
 
@@ -109,7 +109,7 @@ export const syncMikrotikStatus = async (req, res) => {
 
     // 2) Connect to MikroTik and update hotspot user profiles
     const device = new MikroNode(MIKROTIK_IP);
-    const [login] = await device.connect(MIKROTIK_USER, MIKROTIK_PASS);
+    const [login] = await device.connect(MIKROTIK_USER, MIKROTIK_PASSWORD);
     const hotspotUser = login.menu('/ip/hotspot/user');
 
     // For demonstration, clear all existing hotspot users.

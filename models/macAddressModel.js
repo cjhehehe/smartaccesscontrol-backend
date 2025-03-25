@@ -15,7 +15,7 @@ export const saveMacAddress = async ({
 }) => {
   try {
     const payload = {
-      mac_address: mac,  // note the DB column is "mac_address"
+      mac_address: mac,  // DB column is "mac_address"
       ip,
       status: status || 'pending',
       created_at: created_at || new Date().toISOString()
@@ -56,7 +56,7 @@ export const findMacRecord = async (mac) => {
       console.error('[MAC Model] Error finding MAC record:', error);
       return null;
     }
-    return data; // either an object or null
+    return data;
   } catch (err) {
     console.error('[MAC Model] Unexpected error in findMacRecord:', err);
     return null;
@@ -90,27 +90,23 @@ export const updateMacStatus = async (mac, status) => {
 
 /**
  * Upsert logic: If MAC doesn't exist, create it with the given status.
- * If it does exist, update the status.
+ * If it exists, update the status.
  */
 export const upsertMacAddress = async (mac, status) => {
   try {
-    // 1) Check if record exists
     const existingRecord = await findMacRecord(mac);
     if (!existingRecord) {
-      // 2) Insert as a new record
       const { data, error } = await supabase
         .from('mac_addresses')
         .insert([{ mac_address: mac, status }])
         .select()
         .single();
-
       if (error) {
         console.error('[MAC Model] Error inserting new MAC record:', error);
         return { data: null, error };
       }
       return { data, error: null };
     } else {
-      // 3) Update existing record
       const { data, error } = await supabase
         .from('mac_addresses')
         .update({ status })

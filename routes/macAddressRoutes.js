@@ -23,7 +23,7 @@ router.post('/authenticate', authenticateMacAddress);
 // POST: deauthenticate a MAC address
 router.post('/deauthenticate', deauthenticateMacAddress);
 
-// PUT: update status for a MAC address
+// PUT: update status for a MAC address (upsert)
 router.put('/update-status', updateMacAddressStatus);
 
 // POST: verify if a MAC address is valid/authenticated
