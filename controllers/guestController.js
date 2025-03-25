@@ -13,6 +13,7 @@ import {
 
 /**
  * Convert "bigint" or "{ low: number, high: number }" ID to a plain number.
+ * (Helper function used by multiple exports below.)
  */
 function fixId(obj) {
   if (!obj) return;
@@ -38,12 +39,34 @@ export const registerGuest = async (req, res) => {
       });
     }
 
-    // (Optional) Add uniqueness checks if needed here.
+    // 1) Check if email already exists
+    const { data: existingEmail, error: emailCheckErr } = await findUserByEmail(email);
+    if (emailCheckErr) {
+      console.error('[Guest] Error checking existing email:', emailCheckErr);
+      return res.status(500).json({ message: 'Database error while checking email.' });
+    }
+    if (existingEmail) {
+      return res.status(409).json({
+        message: 'That email is already registered. Please use a different email.',
+      });
+    }
 
-    // Hash the password
+    // 2) Check if phone already exists
+    const { data: existingPhone, error: phoneCheckErr } = await findUserByPhone(phone);
+    if (phoneCheckErr) {
+      console.error('[Guest] Error checking existing phone:', phoneCheckErr);
+      return res.status(500).json({ message: 'Database error while checking phone.' });
+    }
+    if (existingPhone && existingPhone.length > 0) {
+      return res.status(409).json({
+        message: 'That phone number is already registered. Please use a different phone.',
+      });
+    }
+
+    // 3) Hash the password
     const hashedPassword = await bcrypt.hash(password, 10);
 
-    // Set default membership level if none provided
+    // 4) Prepare user object
     const newUser = {
       name,
       email,
@@ -56,20 +79,32 @@ export const registerGuest = async (req, res) => {
     };
 
     console.log('[Guest] Registering new guest:', newUser);
+
+    // 5) Insert into DB
     const { data, error } = await createUser(newUser);
     if (error) {
-      console.error('[Guest] Database Insert Error:', error);
-      return res
-        .status(500)
-        .json({ message: 'Database error: Unable to register guest.' });
+      // If Supabase returns a uniqueness violation or other constraint error, handle it:
+      const errorMsg = error.message || '';
+      console.error('[Guest] Database Insert Error:', errorMsg);
+
+      if (errorMsg.includes('duplicate key value')) {
+        // Unique constraint was violated
+        return res.status(409).json({
+          message: 'Email or phone is already in use. Please use different credentials.',
+        });
+      }
+      // Otherwise, return a generic 500
+      return res.status(500).json({ message: 'Database error: Unable to register guest.' });
     }
 
-    // Fix ID if necessary
+    // 6) Fix ID if needed
     fixId(data);
 
-    return res
-      .status(201)
-      .json({ message: 'Guest registered successfully.', data });
+    // 7) Return success
+    return res.status(201).json({
+      message: 'Guest registered successfully.',
+      data,
+    });
   } catch (error) {
     console.error('[Guest] Unexpected Error (registerGuest):', error);
     return res.status(500).json({ message: 'Internal server error.' });
