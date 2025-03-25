@@ -260,10 +260,10 @@ async function notifyAllAdmins(title, message, notificationType = 'room_status',
 
 /**
  * checkOutRoomById:
- * 1) Fetch the room
- * 2) Clear occupant fields in DB (via checkOutRoom)
- * 3) If occupant present, reset RFID & notify occupant
- * 4) Notify all admins
+ * 1) Fetch the room.
+ * 2) Clear occupant fields in DB (via checkOutRoom).
+ * 3) If an occupant was present, notify and reset their RFID tags directly.
+ * 4) Notify all admins.
  *
  * 'reason' can be "Early Check-Out" or "Automatic Checkout" to differentiate.
  */
@@ -292,7 +292,7 @@ export const checkOutRoomById = async (roomId, reason = 'Automatic Checkout') =>
       return { success: false, error: new Error('Room not found or could not be checked out') };
     }
 
-    // 3) If an occupant was present, notify and reset their RFID.
+    // 3) If an occupant was present, notify and reset their RFID tags directly.
     if (currentGuestId) {
       try {
         // Notify occupant
@@ -308,26 +308,16 @@ export const checkOutRoomById = async (roomId, reason = 'Automatic Checkout') =>
           console.error('[RoomsModel] Failed to create occupant check-out notification:', occupantNotifErr);
         }
 
-        // Attempt to reset the RFID for the guest (set guest_id -> null and status -> 'available')
-        const { data: resetRFIDData, error: resetError } = await resetRFIDByGuest(currentGuestId);
-        // If resetRFIDByGuest doesn't update any records, do fallback
-        if (
-          resetError ||
-          !resetRFIDData ||
-          (Array.isArray(resetRFIDData) && resetRFIDData.length === 0)
-        ) {
-          console.warn('[RoomsModel] resetRFIDByGuest did not update any records. Executing fallback update...');
-          // Fallback: Directly update the rfid_tags table via Supabase
-          const { error: fallbackError } = await supabase
-            .from('rfid_tags')
-            .update({
-              guest_id: null,
-              status: 'available',
-            })
-            .eq('guest_id', currentGuestId);
-          if (fallbackError) {
-            console.error('[RoomsModel] Fallback update for RFID failed:', fallbackError);
-          }
+        // Force update of any RFID tags for the guest:
+        const { error: rfidUpdateError } = await supabase
+          .from('rfid_tags')
+          .update({
+            guest_id: null,
+            status: 'available',
+          })
+          .eq('guest_id', currentGuestId);
+        if (rfidUpdateError) {
+          console.error('[RoomsModel] Error resetting RFID tags:', rfidUpdateError);
         }
       } catch (notifyErr) {
         console.error('[RoomsModel] Error handling guest notifications during checkout:', notifyErr);
@@ -343,7 +333,6 @@ export const checkOutRoomById = async (roomId, reason = 'Automatic Checkout') =>
       console.error('[RoomsModel] Error sending admin check-out notification:', adminNotifErr);
     }
 
-    // Return success result
     return { success: true, data: updatedRoom };
   } catch (err) {
     console.error('[RoomsModel] Unexpected error in checkOutRoomById:', err);
