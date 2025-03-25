@@ -140,6 +140,7 @@ export const markRFIDLost = async (rfid_uid) => {
 
 /**
  * Unassign an RFID (set guest_id to null and status -> 'available').
+ * Removed any conditions that might block updating a tag in an 'active' state.
  */
 export const unassignRFID = async (rfid_uid) => {
   try {
@@ -150,7 +151,6 @@ export const unassignRFID = async (rfid_uid) => {
         status: 'available',
       })
       .eq('rfid_uid', rfid_uid)
-      .neq('status', 'available')
       .select('id, rfid_uid, guest_id, status')
       .single();
 
@@ -167,9 +167,7 @@ export const unassignRFID = async (rfid_uid) => {
 
 /**
  * Reset all RFID tags for a specific guest to 'available'.
- * This clears the guest_id and updates the status.
- * NOTE: Removed the ".in('status', ['active','assigned'])" filter
- * so that ANY existing status for that guest is forced to 'available'.
+ * This clears the guest_id and updates the status for any RFID record linked to the guest.
  */
 export const resetRFIDByGuest = async (guest_id) => {
   try {
@@ -179,7 +177,7 @@ export const resetRFIDByGuest = async (guest_id) => {
         guest_id: null,
         status: 'available',
       })
-      .eq('guest_id', guest_id) // No more .in('status', ...)
+      .match({ guest_id: guest_id })
       .select('id, rfid_uid, guest_id, status');
 
     if (error) {
