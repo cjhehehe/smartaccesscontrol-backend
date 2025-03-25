@@ -364,8 +364,9 @@ export const updateRFIDStatus = async (req, res) => {
 
 /**
  * POST /api/rfid/verify
- * Ensures that on the first scan, the "reserved" room becomes "occupied" 
- * and the RFID goes from "assigned" to "active" before returning the final data.
+ * Verifies an RFID and, on the first scan, if the room is reserved, promotes it to occupied,
+ * and if the RFID is in assigned status, activates it. However, if the guest has already checked out
+ * (i.e. the room status is 'available'), it will deny reactivation.
  */
 export const verifyRFID = async (req, res) => {
   try {
@@ -393,7 +394,7 @@ export const verifyRFID = async (req, res) => {
       });
     }
 
-    // 2) Validate RFID status
+    // 2) Validate RFID status (only 'assigned' and 'active' are allowed for entry)
     if (!['assigned', 'active'].includes(rfidData.status)) {
       return res.status(403).json({
         success: false,
@@ -468,6 +469,15 @@ export const verifyRFID = async (req, res) => {
       return res.status(403).json({
         success: false,
         message: `Access denied: Guest has not reserved or is not occupying room ${targetRoomNumber}.`,
+      });
+    }
+
+    // NEW: If the room status is 'available', it means the guest has already checked out.
+    if (roomData.status === 'available') {
+      return res.status(403).json({
+        success: false,
+        message: 'Access denied: Guest has already checked out.',
+        data: { rfid: rfidData, guest: guestData, room: roomData },
       });
     }
 

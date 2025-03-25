@@ -28,9 +28,7 @@ export const findRFIDByUID = async (rfid_uid) => {
  */
 export const getAllRFIDs = async () => {
   try {
-    const { data, error } = await supabase
-      .from('rfid_tags')
-      .select('*');
+    const { data, error } = await supabase.from('rfid_tags').select('*');
     if (error) {
       console.error('[getAllRFIDs] Error fetching RFID tags:', error);
       return { data: null, error };
@@ -51,7 +49,6 @@ export const getAvailableRFIDs = async () => {
       .from('rfid_tags')
       .select('id, rfid_uid, status')
       .eq('status', 'available');
-
     if (error) {
       console.error('[getAvailableRFIDs] Error fetching available RFID tags:', error);
       return { data: null, error };
@@ -78,7 +75,6 @@ export const assignRFIDToGuest = async (rfid_uid, guest_id) => {
       .eq('status', 'available')
       .select('id, rfid_uid, guest_id, status')
       .single();
-
     if (error) {
       console.error('[assignRFIDToGuest] Error assigning RFID:', error);
       return { data: null, error };
@@ -102,7 +98,6 @@ export const activateRFID = async (rfid_uid) => {
       .eq('status', 'assigned')
       .select('id, rfid_uid, guest_id, status')
       .single();
-
     if (error) {
       console.error('[activateRFID] Error activating RFID:', error);
       return { data: null, error };
@@ -126,7 +121,6 @@ export const markRFIDLost = async (rfid_uid) => {
       .neq('status', 'lost')
       .select('id, rfid_uid, guest_id, status')
       .single();
-
     if (error) {
       console.error('[markRFIDLost] Error marking RFID lost:', error);
       return { data: null, error };
@@ -140,7 +134,6 @@ export const markRFIDLost = async (rfid_uid) => {
 
 /**
  * Unassign an RFID (set guest_id to null and status -> 'available').
- * Removed any conditions that might block updating a tag in an 'active' state.
  */
 export const unassignRFID = async (rfid_uid) => {
   try {
@@ -153,7 +146,6 @@ export const unassignRFID = async (rfid_uid) => {
       .eq('rfid_uid', rfid_uid)
       .select('id, rfid_uid, guest_id, status')
       .single();
-
     if (error) {
       console.error('[unassignRFID] Error unassigning RFID:', error);
       return { data: null, error };
@@ -167,7 +159,6 @@ export const unassignRFID = async (rfid_uid) => {
 
 /**
  * Reset all RFID tags for a specific guest to 'available'.
- * This clears the guest_id and updates the status for any RFID record linked to the guest.
  */
 export const resetRFIDByGuest = async (guest_id) => {
   try {
@@ -177,9 +168,8 @@ export const resetRFIDByGuest = async (guest_id) => {
         guest_id: null,
         status: 'available',
       })
-      .match({ guest_id: guest_id })
+      .match({ guest_id })
       .select('id, rfid_uid, guest_id, status');
-
     if (error) {
       console.error('[resetRFIDByGuest] Error resetting RFID:', error);
       return { data: null, error };

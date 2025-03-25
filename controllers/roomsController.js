@@ -8,7 +8,6 @@ import {
   checkInRoom,
   updateRoomByNumber,
   findRoomByNumber,
-  // Instead of calling checkOutRoom directly, we'll call checkOutRoomById (unified logic)
   checkOutRoomById,
 } from '../models/roomsModel.js';
 

@@ -140,11 +140,9 @@ export const updateRoomByNumber = async (
       .from('rooms')
       .update(updateFields)
       .eq('room_number', roomNumber.toString());
-
     if (onlyIfAvailable) {
       query = query.eq('status', 'available');
     }
-
     const { data, error } = await query.select('*').single();
     if (error) {
       console.error('[RoomsModel] Error updating room by number:', error);
@@ -205,7 +203,7 @@ export const checkInRoom = async (roomId, checkInTime = new Date().toISOString()
 
 /**
  * Check-Out a guest from a room by ID (low-level).
- * Resets occupant fields, sets status = 'available', AND sets ten_min_warning_sent to false.
+ * Resets occupant fields, sets status = 'available', and resets ten_min_warning_sent.
  */
 export const checkOutRoom = async (roomId) => {
   try {
@@ -260,7 +258,7 @@ async function notifyAllAdmins(title, message, notificationType = 'room_status',
 /**
  * checkOutRoomById:
  * 1) Fetch the room.
- * 2) Clear occupant fields in DB (via checkOutRoom).
+ * 2) Clear occupant fields in DB.
  * 3) If an occupant was present, notify and reset their RFID tags.
  * 4) Notify all admins.
  *
@@ -307,7 +305,7 @@ export const checkOutRoomById = async (roomId, reason = 'Automatic Checkout') =>
           console.error('[RoomsModel] Failed to create occupant check-out notification:', occupantNotifErr);
         }
 
-        // Reset RFID tags using the updated resetRFIDByGuest.
+        // Reset RFID tags using resetRFIDByGuest.
         const { error: rfidResetError } = await resetRFIDByGuest(currentGuestId);
         if (rfidResetError) {
           console.error('[RoomsModel] Error resetting RFID tags:', rfidResetError);
