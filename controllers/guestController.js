@@ -43,7 +43,7 @@ export const registerGuest = async (req, res) => {
     // Hash the password
     const hashedPassword = await bcrypt.hash(password, 10);
 
-    // Set default membership level if none provided and store membership_start in UTC
+    // Set default membership level if none provided
     const newUser = {
       name,
       email,
@@ -59,13 +59,17 @@ export const registerGuest = async (req, res) => {
     const { data, error } = await createUser(newUser);
     if (error) {
       console.error('[Guest] Database Insert Error:', error);
-      return res.status(500).json({ message: 'Database error: Unable to register guest.' });
+      return res
+        .status(500)
+        .json({ message: 'Database error: Unable to register guest.' });
     }
 
     // Fix ID if necessary
     fixId(data);
 
-    return res.status(201).json({ message: 'Guest registered successfully.', data });
+    return res
+      .status(201)
+      .json({ message: 'Guest registered successfully.', data });
   } catch (error) {
     console.error('[Guest] Unexpected Error (registerGuest):', error);
     return res.status(500).json({ message: 'Internal server error.' });
@@ -179,9 +183,13 @@ export const changeGuestPassword = async (req, res) => {
       return res.status(401).json({ message: 'Invalid current password.' });
     }
     const hashedNewPassword = await bcrypt.hash(newPassword, 10);
-    const { data: updated, error: updateError } = await updateUser(guestId, { password: hashedNewPassword });
+    const { data: updated, error: updateError } = await updateUser(guestId, {
+      password: hashedNewPassword,
+    });
     if (updateError || !updated) {
-      return res.status(500).json({ message: 'Database error: Unable to update password.' });
+      return res
+        .status(500)
+        .json({ message: 'Database error: Unable to update password.' });
     }
     return res.status(200).json({ message: 'Guest password changed successfully.' });
   } catch (error) {
@@ -211,10 +219,14 @@ export const updateGuestProfile = async (req, res) => {
     }
     const { data: updated, error: updateError } = await updateUser(guestId, updateFields);
     if (updateError || !updated) {
-      return res.status(500).json({ message: 'Database error: Unable to update guest profile.' });
+      return res
+        .status(500)
+        .json({ message: 'Database error: Unable to update guest profile.' });
     }
     fixId(updated);
-    return res.status(200).json({ message: 'Guest profile updated successfully.', updated });
+    return res
+      .status(200)
+      .json({ message: 'Guest profile updated successfully.', updated });
   } catch (error) {
     console.error('[Guest] Error updating guest profile:', error);
     return res.status(500).json({ message: 'Internal server error.' });
@@ -228,16 +240,22 @@ export const uploadGuestAvatar = async (req, res) => {
   try {
     const { guestId, newAvatarUrl } = req.body;
     if (!guestId || !newAvatarUrl) {
-      return res.status(400).json({ message: 'guestId and newAvatarUrl are required.' });
+      return res
+        .status(400)
+        .json({ message: 'guestId and newAvatarUrl are required.' });
     }
     const { data: updated, error } = await updateUser(guestId, { avatar_url: newAvatarUrl });
     if (error || !updated) {
       console.error('[Guest] Error updating guest avatar URL:', error);
-      return res.status(500).json({ message: 'Database error: Unable to update avatar URL.' });
+      return res
+        .status(500)
+        .json({ message: 'Database error: Unable to update avatar URL.' });
     }
     fixId(updated);
     console.log(`[Guest] Guest (ID: ${updated.id}) avatar updated to: ${newAvatarUrl}`);
-    return res.status(200).json({ message: 'Guest avatar updated successfully.', updated });
+    return res
+      .status(200)
+      .json({ message: 'Guest avatar updated successfully.', updated });
   } catch (err) {
     console.error('[Guest] Error in uploadGuestAvatar:', err);
     return res.status(500).json({ message: 'Internal server error.' });
@@ -270,6 +288,8 @@ export const signOutGuest = async (req, res) => {
 export const searchGuests = async (req, res) => {
   try {
     const { query } = req.query;
+    console.log('[Guest] searchGuests called with query:', query); // Debug log
+
     if (!query || query.trim() === '') {
       return res.status(400).json({ message: 'Query string is required.' });
     }
@@ -279,10 +299,14 @@ export const searchGuests = async (req, res) => {
       return res.status(500).json({ message: 'Database error occurred.' });
     }
     if (!guests || guests.length === 0) {
+      // 404 if no matches
       return res.status(404).json({ message: 'No matching guest found.' });
     }
+
+    // If guests found, fix IDs and return 200
     guests.forEach((g) => fixId(g));
-    return res.json({ guests });
+    console.log(`[Guest] Found ${guests.length} guest(s). Returning 200...`);
+    return res.status(200).json({ guests });
   } catch (err) {
     console.error('[Guest] Unexpected error in searchGuests:', err);
     return res.status(500).json({ message: 'Internal server error.' });
@@ -297,7 +321,9 @@ export const getAllGuests = async (req, res) => {
     const { data, error } = await getAllUsers();
     if (error) {
       console.error('[Guest] Error fetching all guests:', error);
-      return res.status(500).json({ message: 'Database error fetching all guests.' });
+      return res
+        .status(500)
+        .json({ message: 'Database error fetching all guests.' });
     }
     data.forEach((g) => fixId(g));
     return res.status(200).json({ guests: data });

@@ -164,6 +164,7 @@ export const updateUser = async (id, updateFields) => {
  */
 export const signOutUser = async (guestId) => {
   try {
+    // For now, no real logic – just returning success
     return { error: null };
   } catch (err) {
     console.error('[UserModel] Error signing out user:', err);
@@ -173,10 +174,11 @@ export const signOutUser = async (guestId) => {
 
 /**
  * Search for guests by name, email, or phone.
- * Note: Password is excluded to keep responses lightweight.
+ * Note: Password is excluded to keep responses lighter.
  */
 export const searchUsersByQuery = async (query) => {
   try {
+    // Using .or() with iLike on name, email, or phone
     const { data, error } = await supabase
       .from('guests')
       .select(`
@@ -190,6 +192,7 @@ export const searchUsersByQuery = async (query) => {
         avatar_url
       `)
       .or(`name.ilike.%${query}%,email.ilike.%${query}%,phone.ilike.%${query}%`);
+
     if (error) {
       console.error('[UserModel] searchUsersByQuery error:', error);
       return { data: null, error };
@@ -206,9 +209,7 @@ export const searchUsersByQuery = async (query) => {
  */
 export const getAllUsers = async () => {
   try {
-    const { data, error } = await supabase
-      .from('guests')
-      .select('*');
+    const { data, error } = await supabase.from('guests').select('*');
     if (error) {
       console.error('[UserModel] Error fetching all guests:', error);
       return { data: null, error };
