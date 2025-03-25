@@ -21,7 +21,6 @@ export const findUserByEmail = async (email) => {
       `)
       .eq('email', email)
       .maybeSingle();
-
     if (error) {
       console.error('[UserModel] Error finding user by email:', error);
       return { data: null, error };
@@ -52,7 +51,6 @@ export const findUserByPhone = async (phone) => {
         avatar_url
       `)
       .eq('phone', phone);
-
     if (error) {
       console.error('[UserModel] Error finding user by phone:', error);
       return { data: null, error };
@@ -84,7 +82,6 @@ export const findUserById = async (id) => {
       `)
       .eq('id', id)
       .maybeSingle();
-
     if (error) {
       console.error('[UserModel] Error finding user by ID:', error);
       return { data: null, error };
@@ -98,11 +95,9 @@ export const findUserById = async (id) => {
 
 /**
  * Create a new guest in the 'guests' table.
- * The membership_start is set in UTC.
  */
 export const createUser = async (userData) => {
   try {
-    // Ensure membership_start is in UTC
     if (!userData.membership_start) {
       userData.membership_start = new Date().toISOString();
     }
@@ -121,7 +116,6 @@ export const createUser = async (userData) => {
         avatar_url
       `)
       .single();
-
     if (error) {
       console.error('[UserModel] Supabase Insert Error:', error.message);
       return { data: null, error };
@@ -154,7 +148,6 @@ export const updateUser = async (id, updateFields) => {
         avatar_url
       `)
       .maybeSingle();
-
     if (error) {
       console.error('[UserModel] Supabase Update Error:', error);
       return { data: null, error };
@@ -167,11 +160,10 @@ export const updateUser = async (id, updateFields) => {
 };
 
 /**
- * Sign out a guest by ID (placeholder).
+ * Sign out a guest by ID.
  */
 export const signOutUser = async (guestId) => {
   try {
-    // Revoke sessions or tokens if applicable.
     return { error: null };
   } catch (err) {
     console.error('[UserModel] Error signing out user:', err);
@@ -181,6 +173,7 @@ export const signOutUser = async (guestId) => {
 
 /**
  * Search for guests by name, email, or phone.
+ * Note: Password is excluded to keep responses lightweight.
  */
 export const searchUsersByQuery = async (query) => {
   try {
@@ -191,14 +184,12 @@ export const searchUsersByQuery = async (query) => {
         name,
         email,
         phone,
-        password,
         membership_level,
         membership_start,
         membership_renewals,
         avatar_url
       `)
       .or(`name.ilike.%${query}%,email.ilike.%${query}%,phone.ilike.%${query}%`);
-
     if (error) {
       console.error('[UserModel] searchUsersByQuery error:', error);
       return { data: null, error };
@@ -218,7 +209,6 @@ export const getAllUsers = async () => {
     const { data, error } = await supabase
       .from('guests')
       .select('*');
-
     if (error) {
       console.error('[UserModel] Error fetching all guests:', error);
       return { data: null, error };
