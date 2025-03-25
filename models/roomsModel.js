@@ -207,7 +207,7 @@ export const checkInRoom = async (roomId, checkInTime = new Date().toISOString()
 
 /**
  * Check-Out a guest from a room by ID (low-level).
- * Resets guest and room related fields to NULL and sets status = 'available'.
+ * Resets occupant fields, sets status = 'available', AND sets ten_min_warning_sent to false.
  * This does NOT send notifications or reset RFID. It's a basic DB update.
  */
 export const checkOutRoom = async (roomId) => {
@@ -221,6 +221,7 @@ export const checkOutRoom = async (roomId) => {
         check_in: null,
         check_out: null,
         status: 'available',
+        ten_min_warning_sent: false, // reset so next occupant can get a 10-min reminder
       })
       .eq('id', roomId)
       .single();
@@ -283,7 +284,7 @@ export const checkOutRoomById = async (roomId, reason = 'Automatic Checkout') =>
     const currentGuestId = roomData.guest_id;
     const roomNumber = roomData.room_number;
 
-    // 2) Clear occupant fields in the DB
+    // 2) Clear occupant fields in the DB (and set ten_min_warning_sent=false)
     const { data: updatedRoom, error: updateError } = await checkOutRoom(roomId);
     if (updateError) {
       console.error('[RoomsModel] Error during check-out:', updateError);
@@ -309,7 +310,7 @@ export const checkOutRoomById = async (roomId, reason = 'Automatic Checkout') =>
           console.error('[RoomsModel] Failed to create occupant check-out notification:', occupantNotifErr);
         }
 
-        // Reset the RFID card for the guest
+        // Reset the RFID card for the guest => status='available', guest_id=null
         const { error: resetError } = await resetRFIDByGuest(currentGuestId);
         if (resetError) {
           console.error('[RoomsModel] Error resetting RFID for guest:', resetError);

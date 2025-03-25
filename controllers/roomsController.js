@@ -13,13 +13,6 @@ import {
 } from '../models/roomsModel.js';
 
 /**
- * Helper to notify all admins by fetching all admin IDs from the DB
- * and calling createNotification(...) for each admin.
- * (You can keep this here if you want, or move it into roomsModel.js,
- *  but it’s not strictly necessary if you do it inside checkOutRoomById.)
- */
-
-/**
  * POST /api/rooms
  * Create a new room record with initial status = 'reserved'.
  */

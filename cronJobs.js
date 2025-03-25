@@ -3,7 +3,7 @@ import cron from 'node-cron';
 import supabase from './config/supabase.js';
 import { createNotification } from './models/notificationModel.js';
 import { checkOutRoomById } from './models/roomsModel.js'; 
-// ^ We'll call checkOutRoomById(...) with reason="Automatic Checkout" to unify the logic.
+// We'll call checkOutRoomById(...) with reason="Automatic Checkout" to unify the logic.
 
 // Helper to fetch rooms that are occupied and have a check_out time
 async function getOccupiedRooms() {
