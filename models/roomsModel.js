@@ -93,9 +93,7 @@ export const getRoomById = async (roomId) => {
  */
 export const getAllRooms = async () => {
   try {
-    const { data, error } = await supabase
-      .from('rooms')
-      .select('*');
+    const { data, error } = await supabase.from('rooms').select('*');
     if (error) {
       console.error('[RoomsModel] Error fetching all rooms:', error);
       return { data: null, error };
@@ -266,7 +264,7 @@ async function notifyAllAdmins(title, message, notificationType = 'room_status',
  * 2) Clear occupant fields in DB (via checkOutRoom)
  * 3) If occupant present, reset RFID & notify occupant
  * 4) Notify all admins
- * 
+ *
  * 'reason' can be "Early Check-Out" or "Automatic Checkout" to differentiate.
  */
 export const checkOutRoomById = async (roomId, reason = 'Automatic Checkout') => {
@@ -297,6 +295,7 @@ export const checkOutRoomById = async (roomId, reason = 'Automatic Checkout') =>
     // 3) If an occupant was present, notify and reset their RFID.
     if (currentGuestId) {
       try {
+        // Notify occupant
         const notifTitle = reason;
         const notifMessage = `You have been checked out of Room #${roomNumber}.`;
         const { error: occupantNotifErr } = await createNotification({
@@ -311,7 +310,12 @@ export const checkOutRoomById = async (roomId, reason = 'Automatic Checkout') =>
 
         // Attempt to reset the RFID for the guest (set guest_id -> null and status -> 'available')
         const { data: resetRFIDData, error: resetError } = await resetRFIDByGuest(currentGuestId);
-        if (resetError || !resetRFIDData || (Array.isArray(resetRFIDData) && resetRFIDData.length === 0)) {
+        // If resetRFIDByGuest doesn't update any records, do fallback
+        if (
+          resetError ||
+          !resetRFIDData ||
+          (Array.isArray(resetRFIDData) && resetRFIDData.length === 0)
+        ) {
           console.warn('[RoomsModel] resetRFIDByGuest did not update any records. Executing fallback update...');
           // Fallback: Directly update the rfid_tags table via Supabase
           const { error: fallbackError } = await supabase
