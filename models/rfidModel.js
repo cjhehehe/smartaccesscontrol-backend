@@ -166,8 +166,10 @@ export const unassignRFID = async (rfid_uid) => {
 };
 
 /**
- * Reset all RFID tags for a specific guest to 'available' if they are 'active' or 'assigned'.
+ * Reset all RFID tags for a specific guest to 'available'.
  * This clears the guest_id and updates the status.
+ * NOTE: Removed the ".in('status', ['active','assigned'])" filter
+ * so that ANY existing status for that guest is forced to 'available'.
  */
 export const resetRFIDByGuest = async (guest_id) => {
   try {
@@ -177,8 +179,7 @@ export const resetRFIDByGuest = async (guest_id) => {
         guest_id: null,
         status: 'available',
       })
-      .eq('guest_id', guest_id)
-      .in('status', ['active', 'assigned'])
+      .eq('guest_id', guest_id) // No more .in('status', ...)
       .select('id, rfid_uid, guest_id, status');
 
     if (error) {
