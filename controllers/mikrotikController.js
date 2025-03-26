@@ -1,17 +1,14 @@
 // controllers/mikrotikController.js
+
 import { createRequire } from 'module';
 const require = createRequire(import.meta.url);
 
 import supabase from '../config/supabase.js';
 
-// 1) Dynamically require node-routeros
+// 1) Dynamically require node-routeros (CommonJS)
 const nodeRouterOS = require('node-routeros');
-
-// 2) Fallback approach to get the correct constructor
-let RouterOSClient = nodeRouterOS.RouterOSClient;
-if (!RouterOSClient && typeof nodeRouterOS.default === 'function') {
-  RouterOSClient = nodeRouterOS.default;
-}
+// 2) The actual constructor is exported as nodeRouterOS.default
+const RouterOSClient = nodeRouterOS.default;
 
 // Environment variables
 const MIKROTIK_IP = process.env.MIKROTIK_IP || '192.168.88.1';
@@ -26,6 +23,7 @@ const MIKROTIK_PORT = process.env.MIKROTIK_PORT || 8728;
 export const getGuestDhcpLeases = async (req, res) => {
   let client;
   try {
+    // Connect to MikroTik
     client = new RouterOSClient({
       host: MIKROTIK_IP,
       user: MIKROTIK_USER,
@@ -34,7 +32,9 @@ export const getGuestDhcpLeases = async (req, res) => {
     });
     await client.connect();
 
+    // Fetch all DHCP leases
     const leases = await client.menu('/ip/dhcp-server/lease').getAll();
+    // Filter only guest_dhcp + bound
     const guestLeases = leases.filter(
       (lease) => lease.server === 'guest_dhcp' && lease.status === 'bound'
     );
@@ -65,6 +65,7 @@ export const getGuestDhcpLeases = async (req, res) => {
 export const storeGuestDhcpLeases = async (req, res) => {
   let client;
   try {
+    // Connect to MikroTik
     client = new RouterOSClient({
       host: MIKROTIK_IP,
       user: MIKROTIK_USER,
@@ -84,6 +85,7 @@ export const storeGuestDhcpLeases = async (req, res) => {
       const ip = lease.address;
       if (!mac || !ip) continue;
 
+      // Check if MAC exists in Supabase
       const { data: existing, error: fetchError } = await supabase
         .from('mac_addresses')
         .select('*')
@@ -100,6 +102,7 @@ export const storeGuestDhcpLeases = async (req, res) => {
         const { error: insertError } = await supabase
           .from('mac_addresses')
           .insert([{ mac, ip, status: 'connected' }]);
+
         if (insertError) {
           console.error(`Insert error for MAC ${mac}:`, insertError);
         } else {
@@ -113,6 +116,7 @@ export const storeGuestDhcpLeases = async (req, res) => {
             .from('mac_addresses')
             .update({ ip })
             .eq('mac', mac);
+
           if (updateError) {
             console.error(`Update IP error for MAC ${mac}:`, updateError);
           } else {
@@ -149,6 +153,7 @@ export const storeGuestDhcpLeases = async (req, res) => {
 export const syncMikrotikStatus = async (req, res) => {
   let client;
   try {
+    // Fetch authenticated MAC addresses from Supabase
     const { data: authenticatedMacs, error } = await supabase
       .from('mac_addresses')
       .select('*')
@@ -161,6 +166,7 @@ export const syncMikrotikStatus = async (req, res) => {
       });
     }
 
+    // Connect to MikroTik
     client = new RouterOSClient({
       host: MIKROTIK_IP,
       user: MIKROTIK_USER,
@@ -169,6 +175,7 @@ export const syncMikrotikStatus = async (req, res) => {
     });
     await client.connect();
 
+    // Example: Add IP to firewall address-list=guest_whitelist
     const firewallList = await client.menu('/ip/firewall/address-list').getAll();
 
     for (const macEntry of authenticatedMacs) {

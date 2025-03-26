@@ -118,26 +118,3 @@ cron.schedule('*/1 * * * *', async () => {
     console.error('[cronJobs] Error in auto-checkout job:', err);
   }
 });
-
-// -------------- 2) Cron Job: Poll MikroTik for New Devices (Runs every 30s) --------------
-
-/*
-  This ensures that even if the captive portal JS doesn't run on some device
-  (e.g., mini-browser fails, or user closes it), your system still captures 
-  new device MAC addresses by polling RouterOS's /ip/hotspot/host. 
-*/
-
-cron.schedule('*/30 * * * * *', async () => {
-  try {
-    console.log('[cronJobs] Polling MikroTik for new hotspot hosts...');
-    // Update the URL to your actual backend route for storing devices
-    const STORE_MACS_URL = 'https://smartaccesscontrol-backend-production.up.railway.app/api/mikrotik/store';
-
-    const response = await fetch(STORE_MACS_URL, { method: 'POST' });
-    const result = await response.json();
-
-    console.log('[cronJobs] storeConnectedDevices result:', result.message || result);
-  } catch (err) {
-    console.error('[cronJobs] Error polling Mikrotik store:', err);
-  }
-});
