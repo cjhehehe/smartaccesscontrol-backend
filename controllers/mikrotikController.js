@@ -24,7 +24,7 @@ function createMikroTikClient() {
     user: MIKROTIK_USER,
     password: MIKROTIK_PASSWORD,
     port: Number(MIKROTIK_PORT),
-    secure: true,           // funnel is HTTPS
+    secure: false,          
     timeout: MIKROTIK_TIMEOUT, // milliseconds
   });
 }
