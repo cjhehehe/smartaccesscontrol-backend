@@ -5,7 +5,8 @@ const require = createRequire(import.meta.url);
 
 import supabase from '../config/supabase.js';
 
-// Use the named export directly:
+// Import the RouterOSClient function from node-routeros.
+// (It appears that in your current version, RouterOSClient is a factory function.)
 const { RouterOSClient } = require('node-routeros');
 
 // Environment variables
@@ -21,8 +22,8 @@ const MIKROTIK_PORT = process.env.MIKROTIK_PORT || 8728;
 export const getGuestDhcpLeases = async (req, res) => {
   let client;
   try {
-    // Connect to MikroTik
-    client = new RouterOSClient({
+    // Use the factory function directly (without `new`)
+    client = RouterOSClient({
       host: MIKROTIK_IP,
       user: MIKROTIK_USER,
       password: MIKROTIK_PASSWORD,
@@ -32,7 +33,7 @@ export const getGuestDhcpLeases = async (req, res) => {
 
     // Fetch all DHCP leases
     const leases = await client.menu('/ip/dhcp-server/lease').getAll();
-    // Filter only guest_dhcp + bound
+    // Filter only guest_dhcp leases that are bound
     const guestLeases = leases.filter(
       (lease) => lease.server === 'guest_dhcp' && lease.status === 'bound'
     );
@@ -63,8 +64,7 @@ export const getGuestDhcpLeases = async (req, res) => {
 export const storeGuestDhcpLeases = async (req, res) => {
   let client;
   try {
-    // Connect to MikroTik
-    client = new RouterOSClient({
+    client = RouterOSClient({
       host: MIKROTIK_IP,
       user: MIKROTIK_USER,
       password: MIKROTIK_PASSWORD,
@@ -164,8 +164,7 @@ export const syncMikrotikStatus = async (req, res) => {
       });
     }
 
-    // Connect to MikroTik
-    client = new RouterOSClient({
+    client = RouterOSClient({
       host: MIKROTIK_IP,
       user: MIKROTIK_USER,
       password: MIKROTIK_PASSWORD,
