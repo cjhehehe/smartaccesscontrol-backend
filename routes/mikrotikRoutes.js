@@ -1,20 +1,20 @@
 // routes/mikrotikRoutes.js
 import express from 'express';
 import {
-  getConnectedDevices,
-  storeConnectedDevices,
-  syncMikrotikStatus,
+  getGuestDhcpLeases,
+  storeGuestDhcpLeases,
+  syncMikrotikStatus
 } from '../controllers/mikrotikController.js';
 
 const router = express.Router();
 
-// GET: Retrieve connected hotspot hosts from MikroTik
-router.get('/connected', getConnectedDevices);
+// GET: Retrieve guest_dhcp leases from MikroTik
+router.get('/leases', getGuestDhcpLeases);
 
-// POST: Poll and store new MAC addresses from the hotspot hosts
-router.post('/store', storeConnectedDevices);
+// POST: Poll & store DHCP leases from guest_dhcp in Supabase
+router.post('/store-leases', storeGuestDhcpLeases);
 
-// POST: Push authenticated MAC addresses into MikroTik hotspot user profiles
-router.post('/sync-status', syncMikrotikStatus);
+// POST: Example: Sync "authenticated" MAC addresses into MikroTik firewall/hotspot
+router.post('/activate-internet', syncMikrotikStatus);
 
 export default router;
