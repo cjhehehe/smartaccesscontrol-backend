@@ -2,11 +2,32 @@
 import { RouterOSClient } from 'routeros-client';
 import supabase from '../config/supabase.js';
 
-// Use the funnel URL (MIKROTIK_HOST) and port 443 for secure connection
+// MikroTik config from .env
 const MIKROTIK_HOST = process.env.MIKROTIK_HOST || 'pi-gateway.tail1e634e.ts.net';
 const MIKROTIK_USER = process.env.MIKROTIK_USER || 'sacaccess';
 const MIKROTIK_PASSWORD = process.env.MIKROTIK_PASSWORD || 'jutbagabaleseyas';
 const MIKROTIK_PORT = process.env.MIKROTIK_PORT || 443;
+
+// Optional: let you set timeout via .env, default 10 sec
+const MIKROTIK_TIMEOUT = Number(process.env.MIKROTIK_TIMEOUT) || 10000;
+
+/**
+ * Utility: Create a new RouterOSClient instance
+ * Ensures all calls use the same config & timeout
+ */
+function createMikroTikClient() {
+  // Log for debugging
+  console.log(`[MikroTik] Creating RouterOSClient for ${MIKROTIK_HOST}:${MIKROTIK_PORT}`);
+
+  return new RouterOSClient({
+    host: MIKROTIK_HOST,
+    user: MIKROTIK_USER,
+    password: MIKROTIK_PASSWORD,
+    port: Number(MIKROTIK_PORT),
+    secure: true,           // funnel is HTTPS
+    timeout: MIKROTIK_TIMEOUT, // milliseconds
+  });
+}
 
 /**
  * GET /api/mikrotik/leases
@@ -14,14 +35,8 @@ const MIKROTIK_PORT = process.env.MIKROTIK_PORT || 443;
 export const getGuestDhcpLeases = async (req, res) => {
   let client;
   try {
-    // Create a new client instance with secure connection enabled
-    client = new RouterOSClient({
-      host: MIKROTIK_HOST,
-      user: MIKROTIK_USER,
-      password: MIKROTIK_PASSWORD,
-      port: Number(MIKROTIK_PORT),
-      secure: true,
-    });
+    client = createMikroTikClient();
+    console.log('[MikroTik] Connecting to fetch DHCP leases...');
     await client.connect();
 
     // Fetch all DHCP leases
@@ -55,15 +70,11 @@ export const getGuestDhcpLeases = async (req, res) => {
 export const storeGuestDhcpLeases = async (req, res) => {
   let client;
   try {
-    client = new RouterOSClient({
-      host: MIKROTIK_HOST,
-      user: MIKROTIK_USER,
-      password: MIKROTIK_PASSWORD,
-      port: Number(MIKROTIK_PORT),
-      secure: true,
-    });
+    client = createMikroTikClient();
+    console.log('[MikroTik] Connecting to poll and store DHCP leases...');
     await client.connect();
 
+    // Fetch and filter guest leases
     const leases = await client.menu('/ip/dhcp-server/lease').getAll();
     const guestLeases = leases.filter(
       (lease) => lease.server === 'guest_dhcp' && lease.status === 'bound'
@@ -97,7 +108,7 @@ export const storeGuestDhcpLeases = async (req, res) => {
           console.error(`Insert error for MAC ${mac}:`, insertError);
         } else {
           insertedCount++;
-          console.log(`Inserted new MAC: ${mac}, IP: ${ip}`);
+          console.log(`[storeGuestDhcpLeases] Inserted new MAC: ${mac}, IP: ${ip}`);
         }
       } else {
         // Optionally update IP if changed
@@ -110,7 +121,7 @@ export const storeGuestDhcpLeases = async (req, res) => {
           if (updateError) {
             console.error(`Update IP error for MAC ${mac}:`, updateError);
           } else {
-            console.log(`Updated IP for MAC: ${mac}, new IP: ${ip}`);
+            console.log(`[storeGuestDhcpLeases] Updated IP for MAC: ${mac}, new IP: ${ip}`);
           }
         }
       }
@@ -155,22 +166,17 @@ export const syncMikrotikStatus = async (req, res) => {
       });
     }
 
-    client = new RouterOSClient({
-      host: MIKROTIK_HOST,
-      user: MIKROTIK_USER,
-      password: MIKROTIK_PASSWORD,
-      port: Number(MIKROTIK_PORT),
-      secure: true,
-    });
+    client = createMikroTikClient();
+    console.log('[MikroTik] Connecting to synchronize authenticated MACs...');
     await client.connect();
 
-    // Example: Add IP to firewall address-list=guest_whitelist
+    // Add IPs to firewall address-list=guest_whitelist
     const firewallList = await client.menu('/ip/firewall/address-list').getAll();
 
     for (const macEntry of authenticatedMacs) {
       const mac = macEntry.mac;
       const ip = macEntry.ip;
-      if (!ip) continue;
+      if (!ip) continue; // skip if no IP assigned
 
       const existingEntry = firewallList.find(
         (entry) => entry.list === 'guest_whitelist' && entry.address === ip
@@ -182,7 +188,7 @@ export const syncMikrotikStatus = async (req, res) => {
           `=address=${ip}`,
           `=comment=Auth MAC: ${mac}`,
         ]);
-        console.log(`Whitelisted IP ${ip} for MAC: ${mac}`);
+        console.log(`[syncMikrotikStatus] Whitelisted IP ${ip} for MAC: ${mac}`);
       }
     }
 
