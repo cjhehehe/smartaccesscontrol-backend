@@ -1,5 +1,6 @@
 // mikrotikController.js
-import { RouterOSClient } from 'routeros-client';
+import pkg from 'routeros-client';
+const { RouterOSClient } = pkg;
 import supabase from '../config/supabase.js';
 
 // MikroTik config from .env
@@ -11,7 +12,6 @@ const MIKROTIK_TIMEOUT = Number(process.env.MIKROTIK_TIMEOUT) || 10000;
 
 /**
  * Utility: Create a new RouterOSClient instance
- * Ensures all calls use the same config & timeout
  */
 function createMikroTikClient() {
   console.log(`[MikroTik] Creating RouterOSClient for ${MIKROTIK_HOST}:${MIKROTIK_PORT}`);
@@ -20,7 +20,7 @@ function createMikroTikClient() {
     user: MIKROTIK_USER,
     password: MIKROTIK_PASSWORD,
     port: Number(MIKROTIK_PORT),
-    secure: false, // use plain TCP unless secure connection is needed
+    secure: false,
     timeout: MIKROTIK_TIMEOUT,
   });
 }
@@ -33,10 +33,11 @@ export const getGuestDhcpLeases = async (req, res) => {
   try {
     client = createMikroTikClient();
     console.log('[Mikrotik] Connecting to fetch DHCP leases...');
-    await client.connect();
+    // IMPORTANT: Store the connected client returned by connect()
+    const connectedClient = await client.connect();
 
-    // Fetch all DHCP leases using the correct API call
-    const leases = await client.write('/ip/dhcp-server/lease/print');
+    // Use connectedClient to fetch DHCP leases
+    const leases = await connectedClient.menu('/ip/dhcp-server/lease').get();
     const guestLeases = leases.filter(
       (lease) => lease.server === 'guest_dhcp' && lease.status === 'bound'
     );
@@ -68,10 +69,10 @@ export const storeGuestDhcpLeases = async (req, res) => {
   try {
     client = createMikroTikClient();
     console.log('[Mikrotik] Connecting to poll and store DHCP leases...');
-    await client.connect();
+    const connectedClient = await client.connect();
 
-    // Fetch all DHCP leases
-    const leases = await client.write('/ip/dhcp-server/lease/print');
+    // Get all DHCP leases
+    const leases = await connectedClient.menu('/ip/dhcp-server/lease').get();
     const guestLeases = leases.filter(
       (lease) => lease.server === 'guest_dhcp' && lease.status === 'bound'
     );
@@ -95,7 +96,7 @@ export const storeGuestDhcpLeases = async (req, res) => {
       }
 
       if (!existing) {
-        // Insert new row if not already present
+        // Insert new row if not present
         const { error: insertError } = await supabase
           .from('mac_addresses')
           .insert([{ mac, ip, status: 'connected' }]);
@@ -164,10 +165,10 @@ export const syncMikrotikStatus = async (req, res) => {
 
     client = createMikroTikClient();
     console.log('[Mikrotik] Connecting to synchronize authenticated MACs...');
-    await client.connect();
+    const connectedClient = await client.connect();
 
     // Fetch existing firewall address-list entries
-    const firewallList = await client.write('/ip/firewall/address-list/print');
+    const firewallList = await connectedClient.menu('/ip/firewall/address-list').get();
 
     for (const macEntry of authenticatedMacs) {
       const mac = macEntry.mac;
@@ -179,11 +180,12 @@ export const syncMikrotikStatus = async (req, res) => {
       );
 
       if (!existingEntry) {
-        await client.write('/ip/firewall/address-list/add', [
-          '=list=guest_whitelist',
-          `=address=${ip}`,
-          `=comment=Auth MAC: ${mac}`,
-        ]);
+        // Add new entries to firewall
+        await connectedClient.menu('/ip/firewall/address-list').add({
+          list: 'guest_whitelist',
+          address: ip,
+          comment: `Auth MAC: ${mac}`,
+        });
         console.log(`[syncMikrotikStatus] Whitelisted IP ${ip} for MAC: ${mac}`);
       }
     }
