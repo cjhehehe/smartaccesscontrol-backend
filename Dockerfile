@@ -30,7 +30,7 @@ EXPOSE 8080
 # 9) Force Node to route all outgoing connections through the local SOCKS5 proxy on port 1055
 ENV ALL_PROXY=socks5h://127.0.0.1:1055
 
-# 10) Run Tailscale in userspace-networking mode, start a SOCKS5 proxy, then run your Node server
+# 10) Run Tailscale in userspace-networking mode, start a SOCKS5 proxy, then run your Node.js server
 CMD ["/bin/bash", "-c", "\
   /usr/local/bin/tailscaled \
     --tun=userspace-networking \
@@ -40,7 +40,6 @@ CMD ["/bin/bash", "-c", "\
   sleep 2 && \
   /usr/local/bin/tailscale up \
     --auth-key=${TAILSCALE_AUTH_KEY} \
-    --hostname=railway-app \
-    --net=userspace-networking && \
+    --hostname=railway-app && \
   node server.js \
 "]
