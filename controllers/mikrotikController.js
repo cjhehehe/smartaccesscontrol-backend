@@ -1,10 +1,12 @@
+// mikrotikController.js
 import { RouterOSClient } from 'routeros-client';
 import supabase from '../config/supabase.js';
 
-const MIKROTIK_IP = process.env.MIKROTIK_IP || '192.100.100.163.55.88.1';
+// Use the funnel URL (MIKROTIK_HOST) and port 443 for secure connection
+const MIKROTIK_HOST = process.env.MIKROTIK_HOST || 'pi-gateway.tail1e634e.ts.net';
 const MIKROTIK_USER = process.env.MIKROTIK_USER || 'sacaccess';
 const MIKROTIK_PASSWORD = process.env.MIKROTIK_PASSWORD || 'jutbagabaleseyas';
-const MIKROTIK_PORT = process.env.MIKROTIK_PORT || 9000;
+const MIKROTIK_PORT = process.env.MIKROTIK_PORT || 443;
 
 /**
  * GET /api/mikrotik/leases
@@ -12,12 +14,13 @@ const MIKROTIK_PORT = process.env.MIKROTIK_PORT || 9000;
 export const getGuestDhcpLeases = async (req, res) => {
   let client;
   try {
-    // Create a new client instance (named import!)
+    // Create a new client instance with secure connection enabled
     client = new RouterOSClient({
-      host: MIKROTIK_IP,
+      host: MIKROTIK_HOST,
       user: MIKROTIK_USER,
       password: MIKROTIK_PASSWORD,
       port: Number(MIKROTIK_PORT),
+      secure: true,
     });
     await client.connect();
 
@@ -53,10 +56,11 @@ export const storeGuestDhcpLeases = async (req, res) => {
   let client;
   try {
     client = new RouterOSClient({
-      host: MIKROTIK_IP,
+      host: MIKROTIK_HOST,
       user: MIKROTIK_USER,
       password: MIKROTIK_PASSWORD,
       port: Number(MIKROTIK_PORT),
+      secure: true,
     });
     await client.connect();
 
@@ -152,10 +156,11 @@ export const syncMikrotikStatus = async (req, res) => {
     }
 
     client = new RouterOSClient({
-      host: MIKROTIK_IP,
+      host: MIKROTIK_HOST,
       user: MIKROTIK_USER,
       password: MIKROTIK_PASSWORD,
       port: Number(MIKROTIK_PORT),
+      secure: true,
     });
     await client.connect();
 
