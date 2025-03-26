@@ -28,7 +28,7 @@
     "node-cron": "^3.0.3",
     "node-fetch": "^3.3.2",
     "pg": "^8.13.3",
-    "routeros-client": "^1.1.2",
+    "routeros-client": "^1.1.1",
     "supabase": "^2.19.7"
   },
   "devDependencies": {

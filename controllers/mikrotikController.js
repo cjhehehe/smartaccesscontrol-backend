@@ -1,9 +1,6 @@
-// controllers/mikrotikController.js
-
-import RouterOSClient from 'routeros-client';
+import { RouterOSClient } from 'routeros-client';
 import supabase from '../config/supabase.js';
 
-// Environment variables
 const MIKROTIK_IP = process.env.MIKROTIK_IP || '192.168.88.1';
 const MIKROTIK_USER = process.env.MIKROTIK_USER || 'sacaccess';
 const MIKROTIK_PASSWORD = process.env.MIKROTIK_PASSWORD || 'jutbagabaleseyas';
@@ -11,12 +8,11 @@ const MIKROTIK_PORT = process.env.MIKROTIK_PORT || 8728;
 
 /**
  * GET /api/mikrotik/leases
- * Fetch DHCP leases from the MikroTik for the 'guest_dhcp' server.
  */
 export const getGuestDhcpLeases = async (req, res) => {
   let client;
   try {
-    // Create a new client instance from routeros-client
+    // Create a new client instance (named import!)
     client = new RouterOSClient({
       host: MIKROTIK_IP,
       user: MIKROTIK_USER,
@@ -27,7 +23,6 @@ export const getGuestDhcpLeases = async (req, res) => {
 
     // Fetch all DHCP leases
     const leases = await client.menu('/ip/dhcp-server/lease').getAll();
-    // Filter only guest_dhcp leases that are bound
     const guestLeases = leases.filter(
       (lease) => lease.server === 'guest_dhcp' && lease.status === 'bound'
     );
@@ -53,7 +48,6 @@ export const getGuestDhcpLeases = async (req, res) => {
 
 /**
  * POST /api/mikrotik/store-leases
- * Poll the MikroTik guest_dhcp leases and store them in Supabase.
  */
 export const storeGuestDhcpLeases = async (req, res) => {
   let client;
@@ -90,7 +84,7 @@ export const storeGuestDhcpLeases = async (req, res) => {
       }
 
       if (!existing) {
-        // Insert a new row with default status
+        // Insert new row
         const { error: insertError } = await supabase
           .from('mac_addresses')
           .insert([{ mac, ip, status: 'connected' }]);
@@ -140,7 +134,6 @@ export const storeGuestDhcpLeases = async (req, res) => {
 
 /**
  * POST /api/mikrotik/activate-internet
- * Example approach for adding authenticated MAC addresses to a firewall list.
  */
 export const syncMikrotikStatus = async (req, res) => {
   let client;
