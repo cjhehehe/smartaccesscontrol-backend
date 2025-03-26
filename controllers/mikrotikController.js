@@ -1,7 +1,11 @@
 // controllers/mikrotikController.js
 
-import pkg from 'node-routeros';
-const { RouterOSClient } = pkg;
+import { createRequire } from 'module';
+const require = createRequire(import.meta.url);
+
+// Dynamically require the node-routeros library (CommonJS)
+const { RouterOSClient } = require('node-routeros');
+
 import supabase from '../config/supabase.js';
 
 // Environment variables
@@ -17,7 +21,6 @@ const MIKROTIK_PORT = process.env.MIKROTIK_PORT || 8728;
 export const getGuestDhcpLeases = async (req, res) => {
   let client;
   try {
-    // Connect to MikroTik
     client = new RouterOSClient({
       host: MIKROTIK_IP,
       user: MIKROTIK_USER,
@@ -26,10 +29,9 @@ export const getGuestDhcpLeases = async (req, res) => {
     });
     await client.connect();
 
-    // Get all DHCP leases
+    // Retrieve all DHCP leases
     const leases = await client.menu('/ip/dhcp-server/lease').getAll();
-
-    // Filter for leases from 'guest_dhcp' that are bound
+    // Filter for guest_dhcp + status=bound
     const guestLeases = leases.filter(
       (lease) => lease.server === 'guest_dhcp' && lease.status === 'bound'
     );
@@ -60,7 +62,6 @@ export const getGuestDhcpLeases = async (req, res) => {
 export const storeGuestDhcpLeases = async (req, res) => {
   let client;
   try {
-    // Connect to MikroTik
     client = new RouterOSClient({
       host: MIKROTIK_IP,
       user: MIKROTIK_USER,
@@ -69,7 +70,7 @@ export const storeGuestDhcpLeases = async (req, res) => {
     });
     await client.connect();
 
-    // Fetch all DHCP leases
+    // Retrieve all DHCP leases
     const leases = await client.menu('/ip/dhcp-server/lease').getAll();
     const guestLeases = leases.filter(
       (lease) => lease.server === 'guest_dhcp' && lease.status === 'bound'
@@ -81,7 +82,7 @@ export const storeGuestDhcpLeases = async (req, res) => {
       const ip = lease.address;
       if (!mac || !ip) continue;
 
-      // Check if the MAC already exists in Supabase
+      // Check if this MAC exists in Supabase
       const { data: existing, error: fetchError } = await supabase
         .from('mac_addresses')
         .select('*')
@@ -94,10 +95,11 @@ export const storeGuestDhcpLeases = async (req, res) => {
       }
 
       if (!existing) {
-        // Insert a new record with default status (e.g., 'connected')
+        // Insert a new record with default status (e.g. 'connected')
         const { error: insertError } = await supabase
           .from('mac_addresses')
-          .insert([{ mac: mac, ip: ip, status: 'connected' }]);
+          .insert([{ mac, ip, status: 'connected' }]);
+
         if (insertError) {
           console.error(`Insert error for MAC ${mac}:`, insertError);
         } else {
@@ -105,12 +107,13 @@ export const storeGuestDhcpLeases = async (req, res) => {
           console.log(`Inserted new MAC: ${mac}, IP: ${ip}`);
         }
       } else {
-        // Optionally update if IP has changed
+        // Optionally update IP if changed
         if (existing.ip !== ip) {
           const { error: updateError } = await supabase
             .from('mac_addresses')
             .update({ ip })
             .eq('mac', mac);
+
           if (updateError) {
             console.error(`Update error for MAC ${mac}:`, updateError);
           } else {
@@ -142,7 +145,8 @@ export const storeGuestDhcpLeases = async (req, res) => {
 
 /**
  * POST /api/mikrotik/activate-internet
- * Push all authenticated MAC addresses from Supabase into MikroTik's hotspot user profiles.
+ * Example of how to push "authenticated" MAC addresses from Supabase
+ * into MikroTik's firewall or hotspot. 
  */
 export const syncMikrotikStatus = async (req, res) => {
   let client;
@@ -161,7 +165,6 @@ export const syncMikrotikStatus = async (req, res) => {
       });
     }
 
-    // Connect to MikroTik
     client = new RouterOSClient({
       host: MIKROTIK_IP,
       user: MIKROTIK_USER,
@@ -170,7 +173,7 @@ export const syncMikrotikStatus = async (req, res) => {
     });
     await client.connect();
 
-    // Example: Synchronize authenticated MAC addresses to MikroTik's firewall address list
+    // Example: Add IP to firewall address-list=guest_whitelist
     const firewallList = await client.menu('/ip/firewall/address-list').getAll();
 
     for (const macEntry of authenticatedMacs) {
