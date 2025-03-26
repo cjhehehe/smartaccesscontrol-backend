@@ -15,10 +15,10 @@ export const saveMacAddress = async ({
 }) => {
   try {
     const payload = {
-      mac_address: mac,  // DB column is "mac_address"
+      mac,             // DB column is "mac"
       ip,
       status: status || 'pending',
-      created_at: created_at || new Date().toISOString()
+      created_at: created_at || new Date().toISOString(),
     };
     if (guest_id) payload.guest_id = guest_id;
     if (rfid_uid) payload.rfid_uid = rfid_uid;
@@ -49,7 +49,7 @@ export const findMacRecord = async (mac) => {
     const { data, error } = await supabase
       .from('mac_addresses')
       .select('*')
-      .eq('mac_address', mac)
+      .eq('mac', mac)
       .maybeSingle();
 
     if (error) {
@@ -71,7 +71,7 @@ export const updateMacStatus = async (mac, status) => {
     const { data, error } = await supabase
       .from('mac_addresses')
       .update({ status })
-      .eq('mac_address', mac)
+      .eq('mac', mac)
       .select()
       .single();
     if (error) {
@@ -96,9 +96,10 @@ export const upsertMacAddress = async (mac, status) => {
   try {
     const existingRecord = await findMacRecord(mac);
     if (!existingRecord) {
+      // Insert a new record with minimal fields
       const { data, error } = await supabase
         .from('mac_addresses')
-        .insert([{ mac_address: mac, status }])
+        .insert([{ mac, status }])
         .select()
         .single();
       if (error) {
@@ -107,10 +108,11 @@ export const upsertMacAddress = async (mac, status) => {
       }
       return { data, error: null };
     } else {
+      // Update existing
       const { data, error } = await supabase
         .from('mac_addresses')
         .update({ status })
-        .eq('mac_address', mac)
+        .eq('mac', mac)
         .select()
         .single();
       if (error) {

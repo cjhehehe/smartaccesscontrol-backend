@@ -1,6 +1,62 @@
 // controllers/macAddressController.js
+
 import supabase from '../config/supabase.js';
-import { upsertMacAddress } from '../models/macAddressModel.js';
+import { 
+  saveMacAddress, 
+  upsertMacAddress 
+} from '../models/macAddressModel.js';
+
+/**
+ * POST /api/mac-address
+ * Create a new MAC address record (if you want a dedicated route).
+ */
+export const createMacAddress = async (req, res) => {
+  try {
+    const {
+      guest_id,
+      rfid_uid,
+      mac,  // The actual device MAC
+      ip,
+      status,
+    } = req.body;
+
+    if (!mac || !ip) {
+      return res.status(400).json({
+        success: false,
+        message: 'mac and ip are required fields.'
+      });
+    }
+
+    const { data, error } = await saveMacAddress({
+      guest_id,
+      rfid_uid,
+      mac,
+      ip,
+      status,
+      created_at: new Date().toISOString(),
+    });
+
+    if (error) {
+      console.error('[createMacAddress] Supabase error:', error);
+      return res.status(500).json({
+        success: false,
+        message: 'Database error: Unable to create MAC address record.',
+      });
+    }
+
+    return res.status(201).json({
+      success: true,
+      message: 'MAC address record created successfully.',
+      data,
+    });
+  } catch (error) {
+    console.error('[createMacAddress] Unexpected error:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Internal server error.',
+    });
+  }
+};
 
 /**
  * GET /api/mac-address/all
@@ -75,11 +131,11 @@ export const getUnauthenticatedMacAddresses = async (req, res) => {
  */
 export const authenticateMacAddress = async (req, res) => {
   try {
-    const { mac_address } = req.body;
-    if (!mac_address) {
+    const { mac } = req.body; // "mac" in DB
+    if (!mac) {
       return res.status(400).json({
         success: false,
-        message: 'mac_address is required.',
+        message: 'mac is required.',
       });
     }
 
@@ -87,7 +143,7 @@ export const authenticateMacAddress = async (req, res) => {
     const { data, error } = await supabase
       .from('mac_addresses')
       .update({ status: 'authenticated' })
-      .eq('mac_address', mac_address)
+      .eq('mac', mac)
       .select()
       .single();
 
@@ -101,13 +157,13 @@ export const authenticateMacAddress = async (req, res) => {
     if (!data) {
       return res.status(404).json({
         success: false,
-        message: `MAC address ${mac_address} not found.`,
+        message: `MAC address ${mac} not found.`,
       });
     }
 
     return res.status(200).json({
       success: true,
-      message: `MAC address ${mac_address} authenticated successfully.`,
+      message: `MAC address ${mac} authenticated successfully.`,
       data,
     });
   } catch (error) {
@@ -125,11 +181,11 @@ export const authenticateMacAddress = async (req, res) => {
  */
 export const deauthenticateMacAddress = async (req, res) => {
   try {
-    const { mac_address } = req.body;
-    if (!mac_address) {
+    const { mac } = req.body;
+    if (!mac) {
       return res.status(400).json({
         success: false,
-        message: 'mac_address is required.',
+        message: 'mac is required.',
       });
     }
 
@@ -137,7 +193,7 @@ export const deauthenticateMacAddress = async (req, res) => {
     const { data, error } = await supabase
       .from('mac_addresses')
       .update({ status: 'unauthenticated' })
-      .eq('mac_address', mac_address)
+      .eq('mac', mac)
       .select()
       .single();
 
@@ -151,13 +207,13 @@ export const deauthenticateMacAddress = async (req, res) => {
     if (!data) {
       return res.status(404).json({
         success: false,
-        message: `MAC address ${mac_address} not found.`,
+        message: `MAC address ${mac} not found.`,
       });
     }
 
     return res.status(200).json({
       success: true,
-      message: `MAC address ${mac_address} deauthenticated successfully.`,
+      message: `MAC address ${mac} deauthenticated successfully.`,
       data,
     });
   } catch (error) {
@@ -177,16 +233,16 @@ export const deauthenticateMacAddress = async (req, res) => {
  */
 export const updateMacAddressStatus = async (req, res) => {
   try {
-    const { mac_address, status } = req.body;
-    if (!mac_address || !status) {
+    const { mac, status } = req.body;
+    if (!mac || !status) {
       return res.status(400).json({
         success: false,
-        message: 'mac_address and status are required.',
+        message: 'mac and status are required.',
       });
     }
 
     // Perform an upsert (create if not found, update if existing)
-    const { data, error } = await upsertMacAddress(mac_address, status);
+    const { data, error } = await upsertMacAddress(mac, status);
     if (error) {
       console.error('[updateMacAddressStatus] upsert error:', error);
       return res.status(500).json({
@@ -197,7 +253,7 @@ export const updateMacAddressStatus = async (req, res) => {
 
     return res.status(200).json({
       success: true,
-      message: `MAC address ${mac_address} status set to '${status}'.`,
+      message: `MAC address ${mac} status set to '${status}'.`,
       data,
     });
   } catch (error) {
@@ -215,11 +271,11 @@ export const updateMacAddressStatus = async (req, res) => {
  */
 export const verifyMacAddress = async (req, res) => {
   try {
-    const { mac_address } = req.body;
-    if (!mac_address) {
+    const { mac } = req.body;
+    if (!mac) {
       return res.status(400).json({
         success: false,
-        message: 'mac_address is required.',
+        message: 'mac is required.',
       });
     }
 
@@ -227,7 +283,7 @@ export const verifyMacAddress = async (req, res) => {
     const { data: macData, error } = await supabase
       .from('mac_addresses')
       .select('*')
-      .eq('mac_address', mac_address)
+      .eq('mac', mac)
       .single();
 
     if (error) {
@@ -240,7 +296,7 @@ export const verifyMacAddress = async (req, res) => {
     if (!macData) {
       return res.status(404).json({
         success: false,
-        message: `MAC address ${mac_address} not found.`,
+        message: `MAC address ${mac} not found.`,
       });
     }
 
@@ -248,13 +304,13 @@ export const verifyMacAddress = async (req, res) => {
     if (macData.status !== 'authenticated') {
       return res.status(403).json({
         success: false,
-        message: `MAC address ${mac_address} is not authenticated. Current status: ${macData.status}`,
+        message: `MAC address ${mac} is not authenticated. Current status: ${macData.status}`,
       });
     }
 
     return res.status(200).json({
       success: true,
-      message: `MAC address ${mac_address} is authenticated and valid.`,
+      message: `MAC address ${mac} is authenticated and valid.`,
       data: macData,
     });
   } catch (error) {

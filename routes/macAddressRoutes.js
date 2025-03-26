@@ -1,6 +1,7 @@
 // routes/macAddressRoutes.js
 import express from 'express';
 import {
+  createMacAddress,
   getAllMacAddresses,
   getUnauthenticatedMacAddresses,
   authenticateMacAddress,
@@ -10,6 +11,9 @@ import {
 } from '../controllers/macAddressController.js';
 
 const router = express.Router();
+
+// POST: create a new MAC address record
+router.post('/', createMacAddress);
 
 // GET: all MAC addresses
 router.get('/all', getAllMacAddresses);
