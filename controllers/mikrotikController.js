@@ -1,13 +1,7 @@
 // controllers/mikrotikController.js
 
-import { createRequire } from 'module';
-const require = createRequire(import.meta.url);
-
+import RouterOSClient from 'routeros-client';
 import supabase from '../config/supabase.js';
-
-// Import the RouterOSClient function from node-routeros.
-// (It appears that in your current version, RouterOSClient is a factory function.)
-const { RouterOSClient } = require('node-routeros');
 
 // Environment variables
 const MIKROTIK_IP = process.env.MIKROTIK_IP || '192.168.88.1';
@@ -22,8 +16,8 @@ const MIKROTIK_PORT = process.env.MIKROTIK_PORT || 8728;
 export const getGuestDhcpLeases = async (req, res) => {
   let client;
   try {
-    // Use the factory function directly (without `new`)
-    client = RouterOSClient({
+    // Create a new client instance from routeros-client
+    client = new RouterOSClient({
       host: MIKROTIK_IP,
       user: MIKROTIK_USER,
       password: MIKROTIK_PASSWORD,
@@ -64,7 +58,7 @@ export const getGuestDhcpLeases = async (req, res) => {
 export const storeGuestDhcpLeases = async (req, res) => {
   let client;
   try {
-    client = RouterOSClient({
+    client = new RouterOSClient({
       host: MIKROTIK_IP,
       user: MIKROTIK_USER,
       password: MIKROTIK_PASSWORD,
@@ -164,7 +158,7 @@ export const syncMikrotikStatus = async (req, res) => {
       });
     }
 
-    client = RouterOSClient({
+    client = new RouterOSClient({
       host: MIKROTIK_IP,
       user: MIKROTIK_USER,
       password: MIKROTIK_PASSWORD,
