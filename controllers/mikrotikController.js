@@ -12,6 +12,9 @@ const MIKROTIK_TIMEOUT = Number(process.env.MIKROTIK_TIMEOUT) || 10000;
 
 /**
  * Utility: Create a new RouterOSClient instance
+ * 
+ * This is the function used to initialize the MikroTik client
+ * using the environment variables in .env or default values.
  */
 function createMikroTikClient() {
   console.log(`[MikroTik] Creating RouterOSClient for ${MIKROTIK_HOST}:${MIKROTIK_PORT}`);
@@ -27,16 +30,18 @@ function createMikroTikClient() {
 
 /**
  * GET /api/mikrotik/leases
+ * 
+ * Retrieves DHCP leases from the MikroTik router,
+ * filtered by server === 'guest_dhcp' and status === 'bound'.
  */
 export const getGuestDhcpLeases = async (req, res) => {
   let client;
   try {
     client = createMikroTikClient();
     console.log('[Mikrotik] Connecting to fetch DHCP leases...');
-    // IMPORTANT: Store the connected client returned by connect()
+    // IMPORTANT: Use the connected client returned by .connect()
     const connectedClient = await client.connect();
 
-    // Use connectedClient to fetch DHCP leases
     const leases = await connectedClient.menu('/ip/dhcp-server/lease').get();
     const guestLeases = leases.filter(
       (lease) => lease.server === 'guest_dhcp' && lease.status === 'bound'
@@ -63,6 +68,10 @@ export const getGuestDhcpLeases = async (req, res) => {
 
 /**
  * POST /api/mikrotik/store-leases
+ * 
+ * Fetches guest_dhcp leases and stores them in Supabase
+ * (table: mac_addresses). If the MAC doesn’t exist, inserts a new row;
+ * if it does exist but IP changed, updates the IP.
  */
 export const storeGuestDhcpLeases = async (req, res) => {
   let client;
@@ -146,6 +155,9 @@ export const storeGuestDhcpLeases = async (req, res) => {
 
 /**
  * POST /api/mikrotik/activate-internet
+ * 
+ * Fetches authenticated MAC addresses from Supabase, 
+ * then ensures each IP is whitelisted in the MikroTik’s firewall address-list.
  */
 export const syncMikrotikStatus = async (req, res) => {
   let client;

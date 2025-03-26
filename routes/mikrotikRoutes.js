@@ -1,4 +1,4 @@
-// routes/mikrotikRoutes.js
+// mikrotikRoutes.js
 import express from 'express';
 import {
   getGuestDhcpLeases,
