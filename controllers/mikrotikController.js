@@ -1,10 +1,10 @@
 import { RouterOSClient } from 'routeros-client';
 import supabase from '../config/supabase.js';
 
-const MIKROTIK_IP = process.env.MIKROTIK_IP || '192.168.88.1';
+const MIKROTIK_IP = process.env.MIKROTIK_IP || '192.100.100.163.55.88.1';
 const MIKROTIK_USER = process.env.MIKROTIK_USER || 'sacaccess';
 const MIKROTIK_PASSWORD = process.env.MIKROTIK_PASSWORD || 'jutbagabaleseyas';
-const MIKROTIK_PORT = process.env.MIKROTIK_PORT || 8728;
+const MIKROTIK_PORT = process.env.MIKROTIK_PORT || 9000;
 
 /**
  * GET /api/mikrotik/leases
