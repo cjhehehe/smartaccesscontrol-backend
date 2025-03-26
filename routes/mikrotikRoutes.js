@@ -3,7 +3,7 @@ import express from 'express';
 import {
   getGuestDhcpLeases,
   storeGuestDhcpLeases,
-  syncMikrotikStatus
+  syncMikrotikStatus,
 } from '../controllers/mikrotikController.js';
 
 const router = express.Router();
@@ -11,10 +11,10 @@ const router = express.Router();
 // GET: Retrieve guest_dhcp leases from MikroTik
 router.get('/leases', getGuestDhcpLeases);
 
-// POST: Poll & store DHCP leases from guest_dhcp in Supabase
+// POST: Poll and store DHCP leases from guest_dhcp into Supabase
 router.post('/store-leases', storeGuestDhcpLeases);
 
-// POST: Example: Sync "authenticated" MAC addresses into MikroTik firewall/hotspot
+// POST: Synchronize authenticated MAC addresses into MikroTik
 router.post('/activate-internet', syncMikrotikStatus);
 
 export default router;
