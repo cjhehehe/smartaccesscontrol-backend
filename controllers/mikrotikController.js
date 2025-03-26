@@ -5,10 +5,8 @@ const require = createRequire(import.meta.url);
 
 import supabase from '../config/supabase.js';
 
-// 1) Dynamically require node-routeros (CommonJS)
-const nodeRouterOS = require('node-routeros');
-// 2) The actual constructor is exported as nodeRouterOS.default
-const RouterOSClient = nodeRouterOS.default;
+// Use the named export directly:
+const { RouterOSClient } = require('node-routeros');
 
 // Environment variables
 const MIKROTIK_IP = process.env.MIKROTIK_IP || '192.168.88.1';
