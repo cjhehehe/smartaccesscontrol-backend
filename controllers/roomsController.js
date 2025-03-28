@@ -11,7 +11,7 @@ import {
   checkOutRoomById,
 } from '../models/roomsModel.js';
 
-import axios from 'axios'; // We'll use axios to call the Mikrotik API
+import axios from 'axios'; // For calling the Mikrotik API
 import dotenv from 'dotenv';
 dotenv.config();
 
@@ -252,13 +252,12 @@ export const removeRoom = async (req, res) => {
 
 /**
  * POST /api/rooms/:id/checkin
- * Check a guest into a room (set check_in time and status='occupied').
+ * Check a guest into a room (set check_in time and status = 'occupied').
  */
 export const roomCheckIn = async (req, res) => {
   try {
     const { id } = req.params;
     const checkInTime = req.body.check_in || new Date().toISOString();
-
     const { data, error } = await checkInRoom(id, checkInTime);
     if (error) {
       console.error('[Rooms] Error during check-in:', error);
@@ -277,14 +276,14 @@ export const roomCheckIn = async (req, res) => {
 
 /**
  * POST /api/rooms/:id/checkout
- * Early check-out (or manual check-out):
- * 1) Calls checkOutRoomById (which sets occupant fields to null, status='available').
- * 2) Also calls the Pi-based /api/deactivate-internet to remove occupant from the whitelist.
+ * Early check-out (manual check-out) workflow:
+ *   - Updates the room record with a check-out time and sets status to 'available'.
+ *   - Does NOT clear the check_in/check_out timestamps (to preserve history).
+ *   - Calls the Pi-based /api/deactivate-internet endpoint to remove guest devices from the whitelist.
  */
 export const roomCheckOut = async (req, res) => {
   try {
     const { id } = req.params;
-
     // "Early Check-Out" reason
     const result = await checkOutRoomById(id, 'Early Check-Out');
     if (!result.success) {
@@ -299,21 +298,16 @@ export const roomCheckOut = async (req, res) => {
       });
     }
 
-    // occupantId is the original occupant's guest_id from checkOutRoomById
-    // updatedRoom is the new room data after occupant is cleared
+    // Do not clear check_in/check_out times so we preserve history;
+    // we only update the status in mac_addresses (via the Pi endpoint) to remove Wi-Fi access.
     const updatedRoom = result.data;
-    const occupantId = result.occupantId;
+    const occupantId = result.occupantId; // Assume checkOutRoomById returns the original guest_id in this field
 
     if (occupantId) {
-      // 1) We'll read the Mikrotik host from .env
-      //    e.g. MIKROTIK_API_URL or we can construct from MIKROTIK_HOST + port
-      const mikrotikApiUrl =
-        process.env.MIKROTIK_API_URL || 'https://pi-gateway.tail1e634e.ts.net';
-      // 2) We'll read the public API key from .env
-      const apiKey = process.env.PUBLIC_API_KEY;
-
       try {
-        // 3) Call the /api/deactivate-internet endpoint on the Pi server
+        const mikrotikApiUrl =
+          process.env.MIKROTIK_API_URL || `https://${process.env.MIKROTIK_HOST}`;
+        const apiKey = process.env.PUBLIC_API_KEY;
         await axios.post(
           `${mikrotikApiUrl}/api/deactivate-internet`,
           { guest_id: occupantId },
@@ -367,7 +361,7 @@ export const updateRoomStatusByNumber = async (req, res) => {
       });
     }
 
-    // Disallow changing from 'occupied' -> anything else unless occupant is checked out
+    // Disallow changing from 'occupied' -> anything else unless the guest is checked out.
     if (existingRoom.status === 'occupied' && status !== 'occupied') {
       return res.status(400).json({
         success: false,
@@ -394,16 +388,7 @@ export const updateRoomStatusByNumber = async (req, res) => {
       });
     }
 
-    // Optionally notify occupant if there's a guest_id
-    if (updatedRoom.guest_id) {
-      try {
-        // e.g. send a push notification or createNotification
-        // ...
-      } catch (notifCatchErr) {
-        console.error('[Rooms] Unexpected error creating occupant notification:', notifCatchErr);
-      }
-    }
-
+    // Optionally notify occupant if there's a guest_id (notification logic not shown here)
     return res.status(200).json({
       success: true,
       message: `Room #${room_number} status updated to ${status}.`,
