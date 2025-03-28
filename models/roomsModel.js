@@ -110,10 +110,12 @@ export const getAllRooms = async () => {
  */
 export const updateRoom = async (roomId, updateFields) => {
   try {
+    // Important: use .select('*') so we get back the updated row
     const { data, error } = await supabase
       .from('rooms')
       .update(updateFields)
       .eq('id', roomId)
+      .select('*') // <-- this ensures we get updatedRoom in 'data'
       .single();
     if (error) {
       console.error('[RoomsModel] Error updating room:', error);
@@ -140,9 +142,12 @@ export const updateRoomByNumber = async (
       .from('rooms')
       .update(updateFields)
       .eq('room_number', roomNumber.toString());
+
     if (onlyIfAvailable) {
       query = query.eq('status', 'available');
     }
+
+    // Must use .select('*') to get the updated row
     const { data, error } = await query.select('*').single();
     if (error) {
       console.error('[RoomsModel] Error updating room by number:', error);
@@ -164,6 +169,7 @@ export const deleteRoom = async (roomId) => {
       .from('rooms')
       .delete()
       .eq('id', roomId)
+      .select('*') // If you want the deleted row, also do .select('*')
       .single();
     if (error) {
       console.error('[RoomsModel] Error deleting room:', error);
@@ -189,6 +195,7 @@ export const checkInRoom = async (roomId, checkInTime = new Date().toISOString()
         status: 'occupied',
       })
       .eq('id', roomId)
+      .select('*') // get updated row
       .single();
     if (error) {
       console.error('[RoomsModel] Error during check-in:', error);
@@ -219,7 +226,9 @@ export const checkOutRoom = async (roomId) => {
         ten_min_warning_sent: false,
       })
       .eq('id', roomId)
+      .select('*') // must select to get the updated row
       .single();
+
     if (error) {
       console.error('[RoomsModel] Error during check-out:', error);
       return { data: null, error };
@@ -257,12 +266,11 @@ async function notifyAllAdmins(title, message, notificationType = 'room_status',
 
 /**
  * checkOutRoomById:
- * 1) Fetch the room.
- * 2) Clear occupant fields in DB.
- * 3) If an occupant was present, notify and reset their RFID tags.
- * 4) Notify all admins.
- *
- * 'reason' can be "Early Check-Out" or "Automatic Checkout".
+ * 1) Fetch the room by ID
+ * 2) Clear occupant fields in DB (checkOutRoom)
+ * 3) If occupant was present, notify occupant & reset RFID
+ * 4) Notify all admins
+ * 5) Return occupantId as well so the controller can call /api/deactivate-internet
  */
 export const checkOutRoomById = async (roomId, reason = 'Automatic Checkout') => {
   try {
@@ -286,13 +294,14 @@ export const checkOutRoomById = async (roomId, reason = 'Automatic Checkout') =>
       return { success: false, error: updateError };
     }
     if (!updatedRoom) {
+      // If supabase returned null for updatedRoom
       return { success: false, error: new Error('Room not found or could not be checked out') };
     }
 
-    // 3) If an occupant was present, notify and reset their RFID tags.
+    // 3) If an occupant was present, notify occupant and reset RFID tags
     if (currentGuestId) {
       try {
-        // Notify occupant.
+        // Notify occupant
         const notifTitle = reason;
         const notifMessage = `You have been checked out of Room #${roomNumber}.`;
         const { error: occupantNotifErr } = await createNotification({
@@ -305,7 +314,7 @@ export const checkOutRoomById = async (roomId, reason = 'Automatic Checkout') =>
           console.error('[RoomsModel] Failed to create occupant check-out notification:', occupantNotifErr);
         }
 
-        // Reset RFID tags using resetRFIDByGuest.
+        // Reset RFID tags
         const { error: rfidResetError } = await resetRFIDByGuest(currentGuestId);
         if (rfidResetError) {
           console.error('[RoomsModel] Error resetting RFID tags:', rfidResetError);
@@ -315,7 +324,7 @@ export const checkOutRoomById = async (roomId, reason = 'Automatic Checkout') =>
       }
     }
 
-    // 4) Notify all admins.
+    // 4) Notify all admins
     try {
       const adminTitle = 'Room Checked Out';
       const adminMessage = `Room #${roomNumber} was checked out (ID: ${roomId}). Reason: ${reason}.`;
@@ -324,7 +333,12 @@ export const checkOutRoomById = async (roomId, reason = 'Automatic Checkout') =>
       console.error('[RoomsModel] Error sending admin check-out notification:', adminNotifErr);
     }
 
-    return { success: true, data: updatedRoom };
+    // 5) Return occupantId so the controller can call /api/deactivate-internet
+    return {
+      success: true,
+      data: updatedRoom,
+      occupantId: currentGuestId || null,
+    };
   } catch (err) {
     console.error('[RoomsModel] Unexpected error in checkOutRoomById:', err);
     return { success: false, error: err };

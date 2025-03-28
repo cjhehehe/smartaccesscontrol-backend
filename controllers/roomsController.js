@@ -11,7 +11,7 @@ import {
   checkOutRoomById,
 } from '../models/roomsModel.js';
 
-import axios from 'axios'; // For calling the Mikrotik API
+import axios from 'axios';
 import dotenv from 'dotenv';
 dotenv.config();
 
@@ -276,14 +276,15 @@ export const roomCheckIn = async (req, res) => {
 
 /**
  * POST /api/rooms/:id/checkout
- * Early check-out (manual check-out) workflow:
- *   - Updates the room record with a check-out time and sets status to 'available'.
- *   - Does NOT clear the check_in/check_out timestamps (to preserve history).
- *   - Calls the Pi-based /api/deactivate-internet endpoint to remove guest devices from the whitelist.
+ * Early check-out (manual check-out):
+ *   - We clear occupant fields (setting the room to 'available').
+ *   - We do NOT want the "Room not found" error if the row is successfully updated.
+ *   - We also call the Pi-based /api/deactivate-internet to remove occupant from the Wi-Fi whitelist.
  */
 export const roomCheckOut = async (req, res) => {
   try {
     const { id } = req.params;
+
     // "Early Check-Out" reason
     const result = await checkOutRoomById(id, 'Early Check-Out');
     if (!result.success) {
@@ -298,21 +299,23 @@ export const roomCheckOut = async (req, res) => {
       });
     }
 
-    // Do not clear check_in/check_out times so we preserve history;
-    // we only update the status in mac_addresses (via the Pi endpoint) to remove Wi-Fi access.
+    // occupantId is the original occupant's guest_id
     const updatedRoom = result.data;
-    const occupantId = result.occupantId; // Assume checkOutRoomById returns the original guest_id in this field
+    const occupantId = result.occupantId; // We will add occupantId in the model’s return object
 
+    // If occupantId is present, call the Pi-based /api/deactivate-internet
     if (occupantId) {
       try {
         const mikrotikApiUrl =
           process.env.MIKROTIK_API_URL || `https://${process.env.MIKROTIK_HOST}`;
         const apiKey = process.env.PUBLIC_API_KEY;
+
         await axios.post(
           `${mikrotikApiUrl}/api/deactivate-internet`,
           { guest_id: occupantId },
           { headers: { 'x-api-key': apiKey } }
         );
+
         console.log(`[Rooms] Called /api/deactivate-internet for occupantId=${occupantId}`);
       } catch (err) {
         console.error('[Rooms] Error calling /api/deactivate-internet:', err.message);
@@ -361,7 +364,7 @@ export const updateRoomStatusByNumber = async (req, res) => {
       });
     }
 
-    // Disallow changing from 'occupied' -> anything else unless the guest is checked out.
+    // Disallow changing from 'occupied' -> anything else unless the guest is checked out
     if (existingRoom.status === 'occupied' && status !== 'occupied') {
       return res.status(400).json({
         success: false,
@@ -388,7 +391,9 @@ export const updateRoomStatusByNumber = async (req, res) => {
       });
     }
 
-    // Optionally notify occupant if there's a guest_id (notification logic not shown here)
+    // Optionally notify occupant if there's a guest_id
+    // (notification logic omitted here)
+
     return res.status(200).json({
       success: true,
       message: `Room #${room_number} status updated to ${status}.`,
