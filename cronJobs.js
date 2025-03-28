@@ -25,7 +25,7 @@ async function getOccupiedRooms() {
 }
 
 /**
- * Parse the room's check_out into a JS Date
+ * Parse the room's check_out into a JS Date.
  */
 function parseCheckOutDate(checkOutString) {
   if (!checkOutString) return null;
@@ -38,14 +38,14 @@ function parseCheckOutDate(checkOutString) {
 }
 
 /**
- * Send a “10 minutes left” notification to both guest & admin
+ * Send a “10 minutes left” notification to both guest & admin.
  */
 async function sendTenMinWarning(room) {
   const guestId = room.guest_id;
   if (!guestId) return;
 
-  // Example admin ID=1, or you could do a fetchAllAdminIds if you prefer
-  const adminId = 1; 
+  // Example: using admin ID = 1 (or you could fetch all admin IDs)
+  const adminId = 1;
 
   const guestTitle = '10 Minutes Left for Your Stay';
   const guestMessage = `Your scheduled check-out time is almost here (Room #${room.room_number}). 
@@ -74,7 +74,6 @@ Please prepare to check out soon.`;
 }
 
 // -------------- 1) Cron Job: Auto-Checkout (Runs every minute) --------------
-
 cron.schedule('*/1 * * * *', async () => {
   console.log('[cronJobs] Running auto-checkout job...');
 
@@ -88,15 +87,14 @@ cron.schedule('*/1 * * * *', async () => {
       const checkOutDate = parseCheckOutDate(room.check_out);
       if (!checkOutDate) continue;
 
-      // 1) 10-min warning
+      // 1) Send 10-min warning if applicable
       const tenMinutesInMs = 10 * 60 * 1000;
       const timeDiff = checkOutDate - now;
 
-      // If there's between 0 and 10 minutes left, send a warning (once)
       if (timeDiff > 0 && timeDiff <= tenMinutesInMs) {
         if (!room.ten_min_warning_sent) {
           await sendTenMinWarning(room);
-          // Mark the room so we don't resend the same notification
+          // Mark the room so we don't resend the notification
           const { error } = await supabase
             .from('rooms')
             .update({ ten_min_warning_sent: true })
@@ -109,12 +107,30 @@ cron.schedule('*/1 * * * *', async () => {
 
       // 2) Auto-checkout if time is up
       if (now >= checkOutDate) {
-        // "Automatic Checkout" reason
         await checkOutRoomById(room.id, 'Automatic Checkout');
         console.log(`[cronJobs] Auto-checked out Room #${room.room_number}`);
       }
     }
   } catch (err) {
     console.error('[cronJobs] Error in auto-checkout job:', err);
+  }
+
+  // -------------- 2) Cron Job: Trigger Pi Auto-Deactivate Endpoint --------------
+  try {
+    console.log('[cronJobs] Triggering Pi auto-deactivate endpoint...');
+    // Use the environment variable PI_GATEWAY_URL if set; otherwise, default to the below URL.
+    const PI_GATEWAY_URL = process.env.PI_GATEWAY_URL || "https://pi-gateway.tail1e634e.ts.net/api";
+    const response = await fetch(`${PI_GATEWAY_URL}/auto-deactivate-expired`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': process.env.PUBLIC_API_KEY, // Secure API key
+      },
+      body: JSON.stringify({}) // No payload needed
+    });
+    const data = await response.json();
+    console.log('[cronJobs] Pi auto-deactivate response:', data.message);
+  } catch (err) {
+    console.error('[cronJobs] Error calling Pi auto-deactivate endpoint:', err);
   }
 });
