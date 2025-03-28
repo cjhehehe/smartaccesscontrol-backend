@@ -11,6 +11,10 @@ import {
   checkOutRoomById,
 } from '../models/roomsModel.js';
 
+import axios from 'axios'; // We'll use axios to call the Mikrotik API
+import dotenv from 'dotenv';
+dotenv.config();
+
 /**
  * POST /api/rooms
  * Create a new room record with initial status = 'reserved'.
@@ -248,7 +252,7 @@ export const removeRoom = async (req, res) => {
 
 /**
  * POST /api/rooms/:id/checkin
- * Check a guest into a room (set check_in time and status = 'occupied').
+ * Check a guest into a room (set check_in time and status='occupied').
  */
 export const roomCheckIn = async (req, res) => {
   try {
@@ -273,14 +277,15 @@ export const roomCheckIn = async (req, res) => {
 
 /**
  * POST /api/rooms/:id/checkout
- * Check a guest out of a room by ID.
- * Clears occupant fields, sets status to 'available', resets RFID, and notifies occupant + admins.
- * Uses checkOutRoomById to ensure unified logic for both manual and automatic checkout.
+ * Early check-out (or manual check-out):
+ * 1) Calls checkOutRoomById (which sets occupant fields to null, status='available').
+ * 2) Also calls the Pi-based /api/deactivate-internet to remove occupant from the whitelist.
  */
 export const roomCheckOut = async (req, res) => {
   try {
     const { id } = req.params;
-    // Pass "Early Check-Out" as the reason to differentiate from auto-checkout.
+
+    // "Early Check-Out" reason
     const result = await checkOutRoomById(id, 'Early Check-Out');
     if (!result.success) {
       console.error('[Rooms] Error during check-out:', result.error);
@@ -294,10 +299,36 @@ export const roomCheckOut = async (req, res) => {
       });
     }
 
+    // occupantId is the original occupant's guest_id from checkOutRoomById
+    // updatedRoom is the new room data after occupant is cleared
+    const updatedRoom = result.data;
+    const occupantId = result.occupantId;
+
+    if (occupantId) {
+      // 1) We'll read the Mikrotik host from .env
+      //    e.g. MIKROTIK_API_URL or we can construct from MIKROTIK_HOST + port
+      const mikrotikApiUrl =
+        process.env.MIKROTIK_API_URL || 'https://pi-gateway.tail1e634e.ts.net';
+      // 2) We'll read the public API key from .env
+      const apiKey = process.env.PUBLIC_API_KEY;
+
+      try {
+        // 3) Call the /api/deactivate-internet endpoint on the Pi server
+        await axios.post(
+          `${mikrotikApiUrl}/api/deactivate-internet`,
+          { guest_id: occupantId },
+          { headers: { 'x-api-key': apiKey } }
+        );
+        console.log(`[Rooms] Called /api/deactivate-internet for occupantId=${occupantId}`);
+      } catch (err) {
+        console.error('[Rooms] Error calling /api/deactivate-internet:', err.message);
+      }
+    }
+
     return res.status(200).json({
       success: true,
       message: 'Check-out successful',
-      data: result.data,
+      data: updatedRoom,
     });
   } catch (error) {
     console.error('[Rooms] Unexpected error in roomCheckOut:', error);
@@ -307,8 +338,7 @@ export const roomCheckOut = async (req, res) => {
 
 /**
  * PUT /api/rooms/:room_number/update-status
- * Update a room's status by room_number and, if applicable, notify the occupant.
- * Also disallow changing from 'occupied' -> anything else unless the guest is checked out.
+ * Update a room's status by room_number.
  */
 export const updateRoomStatusByNumber = async (req, res) => {
   try {
@@ -337,6 +367,7 @@ export const updateRoomStatusByNumber = async (req, res) => {
       });
     }
 
+    // Disallow changing from 'occupied' -> anything else unless occupant is checked out
     if (existingRoom.status === 'occupied' && status !== 'occupied') {
       return res.status(400).json({
         success: false,
@@ -363,24 +394,11 @@ export const updateRoomStatusByNumber = async (req, res) => {
       });
     }
 
-    // If there's an occupant, optionally notify them.
+    // Optionally notify occupant if there's a guest_id
     if (updatedRoom.guest_id) {
       try {
-        let statusLabel = status;
-        if (status === 'available') statusLabel = 'Available';
-        else if (status === 'reserved') statusLabel = 'Reserved';
-        else if (status === 'occupied') statusLabel = 'Occupied';
-        else if (status === 'maintenance') statusLabel = 'Maintenance';
-
-        const notifTitle = 'Room Status Updated';
-        const notifMessage = `Your room #${room_number} is now ${statusLabel}.`;
-        await createNotification({
-          recipient_guest_id: updatedRoom.guest_id,
-          title: notifTitle,
-          message: notifMessage,
-          note_message: note || null,
-          notification_type: 'room_status',
-        });
+        // e.g. send a push notification or createNotification
+        // ...
       } catch (notifCatchErr) {
         console.error('[Rooms] Unexpected error creating occupant notification:', notifCatchErr);
       }
