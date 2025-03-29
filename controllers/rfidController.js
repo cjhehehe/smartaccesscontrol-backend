@@ -365,8 +365,9 @@ export const updateRFIDStatus = async (req, res) => {
 /**
  * POST /api/rfid/verify
  * Verifies an RFID and, on the first scan, if the room is reserved, promotes it to occupied,
- * and if the RFID is in assigned status, activates it. However, if the guest has already checked out
- * (i.e. the room status is 'available'), it will deny reactivation.
+ * and if the RFID is in assigned status, activates it. If the guest has already checked out,
+ * it denies access. Also ensures we have a corresponding record in room_occupancy_history
+ * and returns its ID as occupancyHistoryId in the response.
  */
 export const verifyRFID = async (req, res) => {
   try {
@@ -409,6 +410,8 @@ export const verifyRFID = async (req, res) => {
         message: 'RFID is not assigned to any guest.',
       });
     }
+
+    // 3a) Fetch the guest
     const { data: guestData, error: guestError } = await findUserById(rfidData.guest_id);
     if (guestError) {
       console.error('[verifyRFID] Error finding guest:', guestError);
@@ -424,7 +427,7 @@ export const verifyRFID = async (req, res) => {
       });
     }
 
-    // 4) Determine which room to check. If not provided, auto-detect among reserved/occupied.
+    // 4) Determine which room to check. If not provided, auto-detect among 'reserved'/'occupied'.
     let targetRoomNumber = room_number;
     if (!targetRoomNumber) {
       const { data: possibleRooms, error: fetchError } = await supabase
@@ -432,6 +435,7 @@ export const verifyRFID = async (req, res) => {
         .select('*')
         .eq('guest_id', rfidData.guest_id)
         .in('status', ['reserved', 'occupied']);
+
       if (fetchError) {
         console.error('[verifyRFID] Error fetching rooms for auto-detect:', fetchError);
         return res.status(500).json({
@@ -472,7 +476,7 @@ export const verifyRFID = async (req, res) => {
       });
     }
 
-    // NEW: If the room status is 'available', it means the guest has already checked out.
+    // 5a) If the room status is 'available', means the guest has already checked out
     if (roomData.status === 'available') {
       return res.status(403).json({
         success: false,
@@ -491,6 +495,7 @@ export const verifyRFID = async (req, res) => {
       }
       const checkInTime = new Date();
       const checkOutTime = new Date(checkInTime.getTime() + hoursStay * 60 * 60 * 1000);
+
       console.log(`[verifyRFID] Upgrading room ${roomData.room_number} from 'reserved' to 'occupied'.`);
       const { data: occupiedRoom, error: checkInError } = await supabase
         .from('rooms')
@@ -502,6 +507,7 @@ export const verifyRFID = async (req, res) => {
         .eq('id', roomData.id)
         .select('*')
         .single();
+
       if (checkInError) {
         console.error('[verifyRFID] Error updating room to occupied:', checkInError);
         return res.status(500).json({
@@ -510,7 +516,9 @@ export const verifyRFID = async (req, res) => {
         });
       }
       roomData = occupiedRoom;
-    } else if (roomData.status === 'occupied') {
+    }
+    // 6a) If already occupied, ensure the check_out hasn't passed
+    else if (roomData.status === 'occupied') {
       if (roomData.check_out) {
         const now = new Date();
         const checkOutTime = new Date(roomData.check_out);
@@ -538,7 +546,66 @@ export const verifyRFID = async (req, res) => {
       rfidData = updatedRFID;
     }
 
-    // 8) Return final data
+    // 8) Find or create the occupant record in room_occupancy_history
+    //    (where check_out is null for that guest+room) or create a new record
+    let occupantRecordId = null;
+    try {
+      // A) Check if there's an open occupant record
+      const { data: existingOccupant, error: occupantError } = await supabase
+        .from('room_occupancy_history')
+        .select('*')
+        .eq('guest_id', guestData.id)
+        .eq('room_id', roomData.id)
+        .is('check_out', null)
+        .maybeSingle();
+
+      if (occupantError) {
+        console.error('[verifyRFID] occupantError:', occupantError);
+        // Not a hard fail: we can still proceed without occupant record
+      }
+
+      if (existingOccupant) {
+        occupantRecordId = existingOccupant.id;
+      } else {
+        // B) Create a new occupant record
+        const occupantSnapshot = {
+          name: guestData.name,
+          email: guestData.email,
+          phone: guestData.phone,
+          membership_level: guestData.membership_level || 'Regular',
+        };
+
+        const recordData = {
+          room_id: roomData.id,
+          guest_id: guestData.id,
+          rfid_id: rfidData.id, // optional if you want to store the RFID PK
+          registration_time: new Date().toISOString(),
+          check_in: null,  // set by the check-in endpoint
+          check_out: null,
+          hours_stay: roomData.hours_stay ? parseFloat(roomData.hours_stay) : null,
+          check_out_reason: null,
+          was_early_checkout: false,
+          occupant_snapshot: occupantSnapshot,
+          mac_addresses_snapshot: {},
+        };
+
+        const { data: newOcc, error: newOccErr } = await supabase
+          .from('room_occupancy_history')
+          .insert([recordData])
+          .single();
+
+        if (newOccErr) {
+          console.error('[verifyRFID] Error creating occupant record:', newOccErr);
+          // We won't fail the entire request, but occupantRecordId remains null
+        } else {
+          occupantRecordId = newOcc.id;
+        }
+      }
+    } catch (err) {
+      console.error('[verifyRFID] Unexpected occupant creation error:', err);
+    }
+
+    // 9) Return final data, including occupantRecordId as occupancyHistoryId
     return res.status(200).json({
       success: true,
       message: 'RFID verified successfully.',
@@ -546,6 +613,7 @@ export const verifyRFID = async (req, res) => {
         rfid: rfidData,
         guest: guestData,
         room: roomData,
+        occupancyHistoryId: occupantRecordId || null, // for the rfid_reader to call check-in
       },
     });
   } catch (error) {
