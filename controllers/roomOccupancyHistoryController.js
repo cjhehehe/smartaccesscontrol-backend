@@ -1,4 +1,5 @@
 // controllers/roomOccupancyHistoryController.js
+
 import {
   createHistoryRecord,
   getAllHistoryRecords,
@@ -22,16 +23,11 @@ export const addHistoryRecord = async (req, res) => {
       mac_addresses_snapshot,
     } = req.body;
 
-    // Basic required fields
-    if (!room_id || !guest_id || !registration_time) {
-      return res.status(400).json({
-        success: false,
-        message:
-          'Missing required fields: room_id, guest_id, and registration_time',
-      });
-    }
+    // Since the new table definition does NOT require these fields,
+    // we remove the strict check:
+    // if (!room_id || !guest_id || !registration_time) { ... }
 
-    // Convert hours_stay to a numeric if needed
+    // Convert hours_stay to a numeric if provided
     let numericHoursStay = null;
     if (typeof hours_stay !== 'undefined' && hours_stay !== null) {
       numericHoursStay = parseFloat(hours_stay);
@@ -40,14 +36,13 @@ export const addHistoryRecord = async (req, res) => {
       }
     }
 
+    // Prepare record data
     const recordData = {
-      room_id,
-      guest_id,
-      // if rfid_id is 0 or falsy, store as null
+      room_id: room_id ?? null,
+      guest_id: guest_id ?? null,
       rfid_id: rfid_id || null,
-      registration_time,
-      // We intentionally set check_in to null for now; updated later when the guest actually scans in
-      check_in: null,
+      registration_time: registration_time || null,
+      check_in: null, // can be updated later
       check_out: check_out || null,
       hours_stay: numericHoursStay,
       check_out_reason: check_out_reason || null,
@@ -157,11 +152,13 @@ export const updateHistoryRecord = async (req, res) => {
       });
     }
 
-    // Optionally parse hours_stay here too if your front-end might send a string
+    // Optionally parse hours_stay if provided
     if (typeof updateData.hours_stay !== 'undefined') {
       const parsed = parseFloat(updateData.hours_stay);
       if (!isNaN(parsed)) {
         updateData.hours_stay = parsed;
+      } else {
+        updateData.hours_stay = null;
       }
     }
 

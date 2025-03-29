@@ -3,7 +3,6 @@ import supabase from '../config/supabase.js';
 
 export const createHistoryRecord = async (recordData) => {
   try {
-    // Insert the record
     const { data, error } = await supabase
       .from('room_occupancy_history')
       .insert([recordData])
@@ -75,7 +74,7 @@ export const updateHistoryRecord = async (id, updateData) => {
 
 export const searchHistoryRecords = async (query) => {
   try {
-    // Example: search occupant_snapshot JSON
+    // Example search by occupant_snapshot JSON
     const { data, error } = await supabase
       .from('room_occupancy_history')
       .select('*')
