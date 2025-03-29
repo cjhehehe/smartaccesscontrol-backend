@@ -1,5 +1,4 @@
 // controllers/roomOccupancyHistoryController.js
-
 import {
   createHistoryRecord,
   getAllHistoryRecords,
@@ -27,18 +26,30 @@ export const addHistoryRecord = async (req, res) => {
     if (!room_id || !guest_id || !registration_time) {
       return res.status(400).json({
         success: false,
-        message: 'Missing required fields: room_id, guest_id, and registration_time',
+        message:
+          'Missing required fields: room_id, guest_id, and registration_time',
       });
+    }
+
+    // Convert hours_stay to a numeric if needed
+    let numericHoursStay = null;
+    if (typeof hours_stay !== 'undefined' && hours_stay !== null) {
+      numericHoursStay = parseFloat(hours_stay);
+      if (isNaN(numericHoursStay)) {
+        numericHoursStay = null;
+      }
     }
 
     const recordData = {
       room_id,
       guest_id,
+      // if rfid_id is 0 or falsy, store as null
       rfid_id: rfid_id || null,
       registration_time,
-      check_in: null,  // updated later
+      // We intentionally set check_in to null for now; updated later when the guest actually scans in
+      check_in: null,
       check_out: check_out || null,
-      hours_stay: hours_stay || null,
+      hours_stay: numericHoursStay,
       check_out_reason: check_out_reason || null,
       was_early_checkout: was_early_checkout || false,
       occupant_snapshot: occupant_snapshot || {},
@@ -50,7 +61,7 @@ export const addHistoryRecord = async (req, res) => {
       return res.status(500).json({
         success: false,
         message: 'Error creating room occupancy history record',
-        error: error.message,
+        error: error.message || error,
       });
     }
 
@@ -60,7 +71,10 @@ export const addHistoryRecord = async (req, res) => {
       data,
     });
   } catch (err) {
-    console.error('[RoomOccupancyHistoryController] Unexpected error in addHistoryRecord:', err);
+    console.error(
+      '[RoomOccupancyHistoryController] Unexpected error in addHistoryRecord:',
+      err
+    );
     return res.status(500).json({
       success: false,
       message: 'Internal server error',
@@ -85,7 +99,10 @@ export const getHistoryRecords = async (req, res) => {
       data,
     });
   } catch (err) {
-    console.error('[RoomOccupancyHistoryController] Unexpected error in getHistoryRecords:', err);
+    console.error(
+      '[RoomOccupancyHistoryController] Unexpected error in getHistoryRecords:',
+      err
+    );
     return res.status(500).json({
       success: false,
       message: 'Internal server error',
@@ -116,7 +133,10 @@ export const getHistoryRecord = async (req, res) => {
       data,
     });
   } catch (err) {
-    console.error('[RoomOccupancyHistoryController] Unexpected error in getHistoryRecord:', err);
+    console.error(
+      '[RoomOccupancyHistoryController] Unexpected error in getHistoryRecord:',
+      err
+    );
     return res.status(500).json({
       success: false,
       message: 'Internal server error',
@@ -137,6 +157,14 @@ export const updateHistoryRecord = async (req, res) => {
       });
     }
 
+    // Optionally parse hours_stay here too if your front-end might send a string
+    if (typeof updateData.hours_stay !== 'undefined') {
+      const parsed = parseFloat(updateData.hours_stay);
+      if (!isNaN(parsed)) {
+        updateData.hours_stay = parsed;
+      }
+    }
+
     const { data, error } = await updateRecordModel(id, updateData);
     if (error) {
       return res.status(500).json({
@@ -152,7 +180,10 @@ export const updateHistoryRecord = async (req, res) => {
       data,
     });
   } catch (err) {
-    console.error('[RoomOccupancyHistoryController] Unexpected error in updateHistoryRecord:', err);
+    console.error(
+      '[RoomOccupancyHistoryController] Unexpected error in updateHistoryRecord:',
+      err
+    );
     return res.status(500).json({
       success: false,
       message: 'Internal server error',
@@ -184,7 +215,10 @@ export const searchHistory = async (req, res) => {
       data,
     });
   } catch (err) {
-    console.error('[RoomOccupancyHistoryController] Unexpected error in searchHistory:', err);
+    console.error(
+      '[RoomOccupancyHistoryController] Unexpected error in searchHistory:',
+      err
+    );
     return res.status(500).json({
       success: false,
       message: 'Internal server error',
