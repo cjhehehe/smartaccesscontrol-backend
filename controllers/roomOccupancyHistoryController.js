@@ -1,4 +1,5 @@
 // controllers/roomOccupancyHistoryController.js
+
 import {
   createHistoryRecord,
   getAllHistoryRecords,
@@ -30,13 +31,12 @@ export const addHistoryRecord = async (req, res) => {
       });
     }
 
-    // Prepare record data
     const recordData = {
       room_id,
       guest_id,
       rfid_id: rfid_id || null,
       registration_time,
-      check_in: null, // updated later
+      check_in: null,  // updated later
       check_out: check_out || null,
       hours_stay: hours_stay || null,
       check_out_reason: check_out_reason || null,
