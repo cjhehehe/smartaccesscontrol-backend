@@ -43,21 +43,15 @@ export const addHistoryRecord = async (req, res) => {
     }
 
     // 2) Insert each device in mac_addresses (if provided)
-    //    We'll store the newly inserted rows in an array called "insertedMacs"
     let insertedMacs = [];
     if (Array.isArray(mac_addresses_snapshot) && mac_addresses_snapshot.length > 0) {
       for (const device of mac_addresses_snapshot) {
-        // Each "device" is expected to be an object with "mac", "ip", "status", etc.
-        // We'll insert it into mac_addresses, along with the guest_id and rfid_id if you want.
-
-        // For example, if you want to override device.guest_id with the one from request:
         const toInsert = {
           mac: device.mac,
           ip: device.ip ?? null,
           status: device.status ?? 'unauthenticated',
           guest_id: guest_id ?? null,
           rfid_id: rfid_id ?? null,
-          // You can add other columns if needed
         };
 
         const { data: macData, error: macError } = await supabase
@@ -67,30 +61,24 @@ export const addHistoryRecord = async (req, res) => {
 
         if (macError) {
           console.error('[addHistoryRecord] Error inserting MAC:', macError);
-          // If desired, you could return an error here. But typically you'd just log it
-          // and continue. For now, let's just continue but skip adding it to insertedMacs.
           continue;
         }
-
-        // Add the newly inserted row to insertedMacs array
         insertedMacs.push(macData);
       }
     }
 
-    // 3) Now we create the room occupancy record
-    //    We store the newly inserted MAC rows in the mac_addresses_snapshot field.
+    // 3) Create the room occupancy record
     const recordData = {
       room_id: room_id ?? null,
       guest_id: guest_id ?? null,
       rfid_id: rfid_id || null,
       registration_time: registration_time || null,
-      check_in: null, // set later by checkInOccupancy
-      check_out: check_out || null, // set later by checkOutOccupancy
+      check_in: null, // will be set at check-in time
+      check_out: check_out || null, // will be set at check-out time
       hours_stay: numericHoursStay,
       check_out_reason: check_out_reason || null,
       was_early_checkout: was_early_checkout || false,
       occupant_snapshot: occupant_snapshot || {},
-      // Final snapshot is the array of inserted rows from the mac_addresses table
       mac_addresses_snapshot: insertedMacs,
     };
 
@@ -103,7 +91,6 @@ export const addHistoryRecord = async (req, res) => {
       });
     }
 
-    // 4) Return success
     return res.status(201).json({
       success: true,
       message: 'Room occupancy history record created successfully',
@@ -121,7 +108,6 @@ export const addHistoryRecord = async (req, res) => {
 
 /**
  * GET /api/room-occupancy-history
- * Returns all occupancy history records, sorted by created_at desc.
  */
 export const getHistoryRecords = async (req, res) => {
   try {
@@ -150,7 +136,6 @@ export const getHistoryRecords = async (req, res) => {
 
 /**
  * GET /api/room-occupancy-history/:id
- * Returns a single occupancy history record by ID.
  */
 export const getHistoryRecord = async (req, res) => {
   try {
@@ -166,7 +151,7 @@ export const getHistoryRecord = async (req, res) => {
     if (!data) {
       return res.status(404).json({
         success: false,
-        message: 'Room occupancy history record not found',
+        message: `Room occupancy history record not found for ID=${id}`,
       });
     }
     return res.status(200).json({
@@ -185,30 +170,18 @@ export const getHistoryRecord = async (req, res) => {
 
 /**
  * PUT /api/room-occupancy-history/:id
- * Generic update method for partial updates (including occupant_snapshot).
  */
 export const updateHistoryRecord = async (req, res) => {
   try {
     const { id } = req.params;
     const updateData = req.body;
-
     if (!id) {
-      return res.status(400).json({
-        success: false,
-        message: 'Missing record ID',
-      });
+      return res.status(400).json({ success: false, message: 'Missing record ID' });
     }
-
-    // Convert hours_stay if provided
     if (typeof updateData.hours_stay !== 'undefined') {
       const parsed = parseFloat(updateData.hours_stay);
-      if (!isNaN(parsed)) {
-        updateData.hours_stay = parsed;
-      } else {
-        updateData.hours_stay = null;
-      }
+      updateData.hours_stay = !isNaN(parsed) ? parsed : null;
     }
-
     const { data, error } = await updateRecordModel(id, updateData);
     if (error) {
       return res.status(500).json({
@@ -217,7 +190,6 @@ export const updateHistoryRecord = async (req, res) => {
         error: error.message,
       });
     }
-
     return res.status(200).json({
       success: true,
       message: 'Room occupancy history record updated successfully',
@@ -235,16 +207,12 @@ export const updateHistoryRecord = async (req, res) => {
 
 /**
  * GET /api/room-occupancy-history/search?query=...
- * Searches occupant_snapshot for partial text match.
  */
 export const searchHistory = async (req, res) => {
   try {
     const { query } = req.query;
     if (!query) {
-      return res.status(400).json({
-        success: false,
-        message: 'Query parameter is required for search',
-      });
+      return res.status(400).json({ success: false, message: 'Query parameter is required for search' });
     }
     const { data, error } = await searchHistoryRecords(query);
     if (error) {
@@ -270,35 +238,72 @@ export const searchHistory = async (req, res) => {
 };
 
 /**
+ * Helper: Ensure an occupant record exists.
+ * If not, auto-create one using request body data.
+ */
+const ensureOccupantRecord = async (id, reqBody) => {
+  // Try fetching by ID
+  let recordResult = await getHistoryRecordById(id);
+  if (!recordResult.data) {
+    // Auto-create the record using provided fields from reqBody
+    // Adjust the required fields as necessary
+    const createResult = await createHistoryRecord({
+      room_id: reqBody.room_id,
+      guest_id: reqBody.guest_id,
+      rfid_id: reqBody.rfid_id,
+      registration_time: reqBody.registration_time || new Date().toISOString(),
+      check_out: reqBody.check_out || null,
+      hours_stay: reqBody.hours_stay,
+      occupant_snapshot: reqBody.occupant_snapshot || {},
+      mac_addresses_snapshot: reqBody.mac_addresses_snapshot || [],
+    });
+    if (createResult.error) {
+      throw new Error('Auto-creation of occupant record failed: ' + createResult.error.message);
+    }
+    return createResult.data.id;
+  }
+  return id;
+};
+
+/**
  * POST /api/room-occupancy-history/:id/checkin
  * "Check-in" the occupancy record:
  *   - Sets check_in if not already set
  *   - Optionally updates hours_stay if provided
+ *   - Auto-creates a record if not found
  */
 export const checkInHistory = async (req, res) => {
   try {
-    const { id } = req.params;
+    let { id } = req.params;
     const { check_in, hours_stay } = req.body;
-
-    // You could default check_in to now() if not provided
     const checkInTime = check_in || new Date().toISOString();
-
     const numericHoursStay =
       typeof hours_stay === 'number' ? hours_stay : parseFloat(hours_stay);
     const hoursValue = !isNaN(numericHoursStay) ? numericHoursStay : undefined;
+
+    // Ensure the occupant record exists; auto-create if necessary.
+    try {
+      id = await ensureOccupantRecord(id, req.body);
+    } catch (autoErr) {
+      return res.status(500).json({
+        success: false,
+        message: 'Error auto-creating occupancy record',
+        error: autoErr.message,
+      });
+    }
 
     const { data, error } = await checkInOccupancyRecord(id, checkInTime, hoursValue);
     if (error) {
       return res.status(500).json({
         success: false,
-        message: 'Error performing occupancy check-in',
+        message: `Error performing occupancy check-in for ID=${id}`,
         error: error.message,
       });
     }
     if (!data) {
       return res.status(404).json({
         success: false,
-        message: 'Room occupancy history record not found',
+        message: `Room occupancy history record not found for ID=${id}`,
       });
     }
 
@@ -323,19 +328,25 @@ export const checkInHistory = async (req, res) => {
  *   - Sets check_out to now or the provided time
  *   - Computes was_early_checkout automatically
  *   - Sets check_out_reason based on method
+ *   - Auto-creates a record if not found
  */
 export const checkOutHistory = async (req, res) => {
   try {
-    const { id } = req.params;
-    const {
-      check_out: providedCheckOut, // optional override
-      check_out_reason: clientReason, // e.g. "Early Check-Out" or "Auto Check-Out"
-    } = req.body;
-
-    // Use now() as fallback if check_out is not provided
+    let { id } = req.params;
+    const { check_out: providedCheckOut, check_out_reason: clientReason } = req.body;
     const checkOutTime = providedCheckOut || new Date().toISOString();
 
-    // Step 1: Fetch the existing record to compare scheduled vs. actual checkout time
+    // Ensure the occupant record exists; auto-create if necessary.
+    try {
+      id = await ensureOccupantRecord(id, req.body);
+    } catch (autoErr) {
+      return res.status(500).json({
+        success: false,
+        message: 'Error auto-creating occupancy record',
+        error: autoErr.message,
+      });
+    }
+
     const { data: existingRecord, error: fetchError } = await getHistoryRecordById(id);
     if (fetchError) {
       return res.status(500).json({
@@ -347,22 +358,18 @@ export const checkOutHistory = async (req, res) => {
     if (!existingRecord) {
       return res.status(404).json({
         success: false,
-        message: 'Occupancy record not found',
+        message: `Occupancy record not found for ID=${id}`,
       });
     }
 
-    // Step 2: Determine if this is early checkout
     let wasEarly = false;
     if (existingRecord.check_out) {
       const expected = new Date(existingRecord.check_out).getTime();
       const actual = new Date(checkOutTime).getTime();
       wasEarly = actual < expected;
     }
-
-    // Step 3: Default reason if none passed in
     const reason = clientReason || (wasEarly ? 'Early Check-Out' : 'Auto Check-Out');
 
-    // Step 4: Update the record
     const { data, error: updateError } = await checkOutOccupancyRecord(
       id,
       checkOutTime,
@@ -372,7 +379,7 @@ export const checkOutHistory = async (req, res) => {
     if (updateError) {
       return res.status(500).json({
         success: false,
-        message: 'Error updating occupancy record for check-out',
+        message: `Error updating occupancy record for check-out (ID=${id})`,
         error: updateError.message,
       });
     }
