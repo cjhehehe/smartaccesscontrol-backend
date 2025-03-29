@@ -6,8 +6,14 @@ import {
   getHistoryRecordById,
   updateHistoryRecord as updateRecordModel,
   searchHistoryRecords,
+  checkInOccupancyRecord,
+  checkOutOccupancyRecord,
 } from '../models/roomOccupancyHistoryModel.js';
 
+/**
+ * POST /api/room-occupancy-history
+ * Creates a new room occupancy record (the "registration" event).
+ */
 export const addHistoryRecord = async (req, res) => {
   try {
     const {
@@ -23,11 +29,7 @@ export const addHistoryRecord = async (req, res) => {
       mac_addresses_snapshot,
     } = req.body;
 
-    // Since the new table definition does NOT require these fields,
-    // we remove the strict check:
-    // if (!room_id || !guest_id || !registration_time) { ... }
-
-    // Convert hours_stay to a numeric if provided
+    // Convert hours_stay to a float if provided
     let numericHoursStay = null;
     if (typeof hours_stay !== 'undefined' && hours_stay !== null) {
       numericHoursStay = parseFloat(hours_stay);
@@ -41,9 +43,9 @@ export const addHistoryRecord = async (req, res) => {
       room_id: room_id ?? null,
       guest_id: guest_id ?? null,
       rfid_id: rfid_id || null,
-      registration_time: registration_time || null,
-      check_in: null, // can be updated later
-      check_out: check_out || null,
+      registration_time: registration_time || null, // if you want to store the time they "registered"
+      check_in: null,    // set later by checkInOccupancy
+      check_out: check_out || null, // set later by checkOutOccupancy
       hours_stay: numericHoursStay,
       check_out_reason: check_out_reason || null,
       was_early_checkout: was_early_checkout || false,
@@ -78,6 +80,10 @@ export const addHistoryRecord = async (req, res) => {
   }
 };
 
+/**
+ * GET /api/room-occupancy-history
+ * Returns all occupancy history records, sorted by created_at desc.
+ */
 export const getHistoryRecords = async (req, res) => {
   try {
     const { data, error } = await getAllHistoryRecords();
@@ -106,6 +112,10 @@ export const getHistoryRecords = async (req, res) => {
   }
 };
 
+/**
+ * GET /api/room-occupancy-history/:id
+ * Returns a single occupancy history record by ID.
+ */
 export const getHistoryRecord = async (req, res) => {
   try {
     const { id } = req.params;
@@ -140,6 +150,10 @@ export const getHistoryRecord = async (req, res) => {
   }
 };
 
+/**
+ * PUT /api/room-occupancy-history/:id
+ * Generic update method for partial updates (including occupant_snapshot).
+ */
 export const updateHistoryRecord = async (req, res) => {
   try {
     const { id } = req.params;
@@ -152,7 +166,7 @@ export const updateHistoryRecord = async (req, res) => {
       });
     }
 
-    // Optionally parse hours_stay if provided
+    // Convert hours_stay if provided
     if (typeof updateData.hours_stay !== 'undefined') {
       const parsed = parseFloat(updateData.hours_stay);
       if (!isNaN(parsed)) {
@@ -189,6 +203,10 @@ export const updateHistoryRecord = async (req, res) => {
   }
 };
 
+/**
+ * GET /api/room-occupancy-history/search?query=...
+ * Searches occupant_snapshot for partial text match.
+ */
 export const searchHistory = async (req, res) => {
   try {
     const { query } = req.query;
@@ -216,6 +234,107 @@ export const searchHistory = async (req, res) => {
       '[RoomOccupancyHistoryController] Unexpected error in searchHistory:',
       err
     );
+    return res.status(500).json({
+      success: false,
+      message: 'Internal server error',
+      error: err.message,
+    });
+  }
+};
+
+/**
+ * POST /api/room-occupancy-history/:id/checkin
+ * "Check-in" the occupancy record:
+ *   - Sets check_in if not already set
+ *   - Optionally updates hours_stay if provided
+ */
+export const checkInHistory = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { check_in, hours_stay } = req.body;
+
+    // You could default check_in to now() if not provided
+    const checkInTime = check_in || new Date().toISOString();
+
+    const numericHoursStay =
+      typeof hours_stay === 'number' ? hours_stay : parseFloat(hours_stay);
+    const hoursValue = !isNaN(numericHoursStay) ? numericHoursStay : undefined;
+
+    const { data, error } = await checkInOccupancyRecord(id, checkInTime, hoursValue);
+    if (error) {
+      return res.status(500).json({
+        success: false,
+        message: 'Error performing occupancy check-in',
+        error: error.message,
+      });
+    }
+    if (!data) {
+      return res.status(404).json({
+        success: false,
+        message: 'Room occupancy history record not found',
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: 'Occupancy record check-in successful',
+      data,
+    });
+  } catch (err) {
+    console.error('[RoomOccupancyHistoryController] Error in checkInHistory:', err);
+    return res.status(500).json({
+      success: false,
+      message: 'Internal server error',
+      error: err.message,
+    });
+  }
+};
+
+/**
+ * POST /api/room-occupancy-history/:id/checkout
+ * "Check-out" the occupancy record:
+ *   - Sets check_out to now or the provided time
+ *   - Sets was_early_checkout if needed
+ *   - Sets check_out_reason if provided
+ */
+export const checkOutHistory = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const {
+      check_out,
+      check_out_reason,
+      was_early_checkout,
+    } = req.body;
+
+    const checkOutTime = check_out || new Date().toISOString();
+
+    const { data, error } = await checkOutOccupancyRecord(
+      id,
+      checkOutTime,
+      check_out_reason,
+      was_early_checkout
+    );
+    if (error) {
+      return res.status(500).json({
+        success: false,
+        message: 'Error performing occupancy check-out',
+        error: error.message,
+      });
+    }
+    if (!data) {
+      return res.status(404).json({
+        success: false,
+        message: 'Room occupancy history record not found',
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: 'Occupancy record check-out successful',
+      data,
+    });
+  } catch (err) {
+    console.error('[RoomOccupancyHistoryController] Error in checkOutHistory:', err);
     return res.status(500).json({
       success: false,
       message: 'Internal server error',

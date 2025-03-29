@@ -5,11 +5,9 @@ import supabase from './config/supabase.js';
 import { createNotification } from './models/notificationModel.js';
 import { checkOutRoomById } from './models/roomsModel.js';
 
-// -------------- Helper for Room Auto-Checkout --------------
+const BACKEND_BASE_URL = "https://smartaccesscontrol-backend-production.up.railway.app/api";
 
-/**
- * Fetch all occupied rooms with a non-null check_out time.
- */
+// 1) Helper: Get all occupied rooms with a non-null check_out time
 async function getOccupiedRooms() {
   const { data, error } = await supabase
     .from('rooms')
@@ -24,9 +22,7 @@ async function getOccupiedRooms() {
   return data;
 }
 
-/**
- * Parse the room's check_out into a JS Date.
- */
+// 2) Helper: Parse a room's check_out into a Date
 function parseCheckOutDate(checkOutString) {
   if (!checkOutString) return null;
   try {
@@ -37,24 +33,19 @@ function parseCheckOutDate(checkOutString) {
   }
 }
 
-/**
- * Send a “10 minutes left” notification to both guest & admin.
- */
+// 3) Send a “10 minutes left” warning if time is almost up
 async function sendTenMinWarning(room) {
   const guestId = room.guest_id;
   if (!guestId) return;
 
-  // Example: using admin ID = 1 (or you could fetch all admin IDs)
-  const adminId = 1;
+  const adminId = 1; // or fetch dynamically
 
   const guestTitle = '10 Minutes Left for Your Stay';
-  const guestMessage = `Your scheduled check-out time is almost here (Room #${room.room_number}). 
-Please prepare to check out soon.`;
+  const guestMessage = `Your scheduled check-out time is almost here (Room #${room.room_number}). Please prepare to check out soon.`;
 
   const adminTitle = 'Guest Check-Out Reminder';
   const adminMessage = `Room #${room.room_number} has only 10 minutes left until check-out.`;
 
-  // Send to guest
   await createNotification({
     recipient_guest_id: guestId,
     title: guestTitle,
@@ -62,7 +53,6 @@ Please prepare to check out soon.`;
     notification_type: 'checkout_reminder',
   });
 
-  // Send to admin
   await createNotification({
     recipient_admin_id: adminId,
     title: adminTitle,
@@ -73,7 +63,55 @@ Please prepare to check out soon.`;
   console.log(`[cronJobs] Sent 10-min warning for room #${room.room_number}`);
 }
 
-// -------------- 1) Cron Job: Auto-Checkout (Runs every minute) --------------
+// 4) Helper: find the open occupant record in room_occupancy_history
+//    (where check_out is null for that guest+room).
+async function findOpenOccupancyRecord(guestId, roomId) {
+  try {
+    const { data, error } = await supabase
+      .from('room_occupancy_history')
+      .select('*')
+      .eq('guest_id', guestId)
+      .eq('room_id', roomId)
+      .is('check_out', null)
+      .maybeSingle();
+
+    if (error) {
+      console.error('[cronJobs] findOpenOccupancyRecord error:', error);
+      return null;
+    }
+    return data || null;
+  } catch (err) {
+    console.error('[cronJobs] Unexpected error in findOpenOccupancyRecord:', err);
+    return null;
+  }
+}
+
+// 5) Helper: POST to checkOutOccupancyHistory
+async function checkOutOccupancyHistory(occupancyId, reason = "Auto Check-Out") {
+  try {
+    const url = `${BACKEND_BASE_URL}/room-occupancy-history/${occupancyId}/checkout`;
+    const body = {
+      check_out: new Date().toISOString(),
+      check_out_reason: reason,
+      was_early_checkout: false
+    };
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body)
+    });
+    if (response.ok) {
+      const data = await response.json();
+      console.log(`[cronJobs] Occupancy record ID=${occupancyId} check-out event created: ${data.message}`);
+    } else {
+      console.error(`[cronJobs] Failed to check-out occupancy ID=${occupancyId}, HTTP ${response.status}`);
+    }
+  } catch (err) {
+    console.error('[cronJobs] checkOutOccupancyHistory error:', err);
+  }
+}
+
+// -------------- Cron Job: Auto-Checkout (Runs every minute) --------------
 cron.schedule('*/1 * * * *', async () => {
   console.log('[cronJobs] Running auto-checkout job...');
 
@@ -87,14 +125,12 @@ cron.schedule('*/1 * * * *', async () => {
       const checkOutDate = parseCheckOutDate(room.check_out);
       if (!checkOutDate) continue;
 
-      // 1) Send 10-min warning if applicable
-      const tenMinutesInMs = 10 * 60 * 1000;
       const timeDiff = checkOutDate - now;
 
-      if (timeDiff > 0 && timeDiff <= tenMinutesInMs) {
+      // 1) 10-min warning
+      if (timeDiff > 0 && timeDiff <= 10 * 60 * 1000) {
         if (!room.ten_min_warning_sent) {
           await sendTenMinWarning(room);
-          // Mark the room so we don't resend the notification
           const { error } = await supabase
             .from('rooms')
             .update({ ten_min_warning_sent: true })
@@ -107,26 +143,40 @@ cron.schedule('*/1 * * * *', async () => {
 
       // 2) Auto-checkout if time is up
       if (now >= checkOutDate) {
-        await checkOutRoomById(room.id, 'Automatic Checkout');
-        console.log(`[cronJobs] Auto-checked out Room #${room.room_number}`);
+        // Step A: Check out the room in "rooms" table
+        const result = await checkOutRoomById(room.id, 'Automatic Checkout');
+        if (result.success) {
+          console.log(`[cronJobs] Auto-checked out Room #${room.room_number}`);
+
+          // Step B: Find the open occupant record in room_occupancy_history
+          // by guest_id + room_id + check_out IS NULL
+          const occupantRecord = await findOpenOccupancyRecord(room.guest_id, room.id);
+          if (occupantRecord) {
+            // Step C: Check out that occupant record
+            await checkOutOccupancyHistory(occupantRecord.id, "Auto Check-Out");
+          } else {
+            console.log(`[cronJobs] No open occupant record found for guest_id=${room.guest_id} & room_id=${room.id}`);
+          }
+        } else {
+          console.error('[cronJobs] Error auto-checking out room ID:', room.id, result.error);
+        }
       }
     }
   } catch (err) {
     console.error('[cronJobs] Error in auto-checkout job:', err);
   }
 
-  // -------------- 2) Cron Job: Trigger Pi Auto-Deactivate Endpoint --------------
+  // -------------- Pi Auto-Deactivate Endpoint --------------
   try {
     console.log('[cronJobs] Triggering Pi auto-deactivate endpoint...');
-    // Use the environment variable PI_GATEWAY_URL if set; otherwise, default to the below URL.
     const PI_GATEWAY_URL = process.env.PI_GATEWAY_URL || "https://pi-gateway.tail1e634e.ts.net/api";
     const response = await fetch(`${PI_GATEWAY_URL}/auto-deactivate-expired`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'x-api-key': process.env.PUBLIC_API_KEY, // Secure API key
+        'x-api-key': process.env.PUBLIC_API_KEY,
       },
-      body: JSON.stringify({}) // No payload needed
+      body: JSON.stringify({})
     });
     const data = await response.json();
     console.log('[cronJobs] Pi auto-deactivate response:', data.message);
