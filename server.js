@@ -23,8 +23,11 @@ import mikrotikRoutes from './routes/mikrotikRoutes.js';
 // NEW: Import the reset routes
 import resetRoutes from './routes/resetRoutes.js';
 
+// NEW: Import the room occupancy history routes
+import roomOccupancyHistoryRoutes from './routes/roomOccupancyHistoryRoutes.js';
+
 // NEW: Import the cron job
-import './cronJobs.js'; // <--- This ensures the cron job file is loaded and starts running.
+import './cronJobs.js';
 
 import { errorHandler } from './middlewares/errorHandler.js';
 
@@ -39,7 +42,7 @@ app.use(helmet());
 app.use(morgan('dev'));
 app.use(apiLimiter);
 
-// Mount your routes
+// Mount routes
 app.use('/api/auth', authRoutes);
 app.use('/api/guests', guestRoutes);
 app.use('/api/admins', adminRoutes);
@@ -49,15 +52,11 @@ app.use('/api/rooms', roomsRoutes);
 app.use('/api/access-logs', accessLogRoutes);
 app.use('/api/activity-logs', activityLogRoutes);
 app.use('/api/feedback', feedbackRoutes);
-
-// Notifications routes
 app.use('/api/notifications', notificationRoutes);
-
 app.use('/api/mac-address', macAddressRoutes);
 app.use('/api/mikrotik', mikrotikRoutes);
-
-// NEW: Mount the reset routes on /api/setup
 app.use('/api/setup', resetRoutes);
+app.use('/api/room-occupancy-history', roomOccupancyHistoryRoutes);
 
 // Root and Catch-All Routes
 app.get('/', (req, res) => {
