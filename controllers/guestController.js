@@ -176,27 +176,55 @@ export const loginGuest = async (req, res) => {
 
 /**
  * Fetch a single Guest Profile by ID.
+ * Returns { success: true, statusCode: 200, data: {...} } on success.
  */
 export const fetchGuestProfileById = async (req, res) => {
   try {
     const { guestId } = req.params;
     if (!guestId) {
-      return res.status(400).json({ message: 'Guest ID is required.' });
+      return res.status(400).json({
+        success: false,
+        statusCode: 400,
+        message: 'Guest ID is required.',
+      });
     }
+
     const { data: guest, error } = await findUserById(guestId);
     if (error) {
-      return res.status(500).json({ message: 'Error fetching guest.' });
+      return res.status(500).json({
+        success: false,
+        statusCode: 500,
+        message: 'Error fetching guest.',
+        error: error.message || error,
+      });
     }
     if (!guest) {
-      return res.status(404).json({ message: 'Guest not found.' });
+      return res.status(404).json({
+        success: false,
+        statusCode: 404,
+        message: 'Guest not found.',
+      });
     }
+
+    // Convert bigints if necessary
     fixId(guest);
-    return res.status(200).json(guest);
+
+    // Return all columns in "data"
+    return res.status(200).json({
+      success: true,
+      statusCode: 200,
+      data: guest,
+    });
   } catch (error) {
     console.error('[Guest] Error fetching guest profile:', error);
-    return res.status(500).json({ message: 'Internal server error.' });
+    return res.status(500).json({
+      success: false,
+      statusCode: 500,
+      message: 'Internal server error.',
+    });
   }
 };
+
 
 /**
  * Change Guest Password.
