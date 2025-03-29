@@ -1,10 +1,10 @@
 // controllers/roomOccupancyHistoryController.js
-import { 
-  createHistoryRecord, 
-  getAllHistoryRecords, 
-  getHistoryRecordById, 
+import {
+  createHistoryRecord,
+  getAllHistoryRecords,
+  getHistoryRecordById,
   updateHistoryRecord as updateRecordModel,
-  searchHistoryRecords 
+  searchHistoryRecords,
 } from '../models/roomOccupancyHistoryModel.js';
 
 export const addHistoryRecord = async (req, res) => {
@@ -13,8 +13,7 @@ export const addHistoryRecord = async (req, res) => {
       room_id,
       guest_id,
       rfid_id,
-      registration_time, // NEW: registration time provided by client (or set by system)
-      // check_in is not required at registration; will be updated later
+      registration_time,
       check_out,
       hours_stay,
       check_out_reason,
@@ -23,6 +22,7 @@ export const addHistoryRecord = async (req, res) => {
       mac_addresses_snapshot,
     } = req.body;
 
+    // Basic required fields
     if (!room_id || !guest_id || !registration_time) {
       return res.status(400).json({
         success: false,
@@ -30,12 +30,13 @@ export const addHistoryRecord = async (req, res) => {
       });
     }
 
+    // Prepare record data
     const recordData = {
       room_id,
       guest_id,
       rfid_id: rfid_id || null,
-      registration_time, // stored at registration
-      check_in: null,    // will be updated when guest scans the door
+      registration_time,
+      check_in: null, // updated later
       check_out: check_out || null,
       hours_stay: hours_stay || null,
       check_out_reason: check_out_reason || null,
@@ -127,8 +128,8 @@ export const getHistoryRecord = async (req, res) => {
 export const updateHistoryRecord = async (req, res) => {
   try {
     const { id } = req.params;
-    const updateData = req.body; // Fields to update, e.g., rfid_id, check_in, check_out, etc.
-    
+    const updateData = req.body;
+
     if (!id) {
       return res.status(400).json({
         success: false,

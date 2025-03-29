@@ -7,6 +7,7 @@ export const createHistoryRecord = async (recordData) => {
       .from('room_occupancy_history')
       .insert([recordData])
       .single();
+
     if (error) {
       console.error('[RoomOccupancyHistoryModel] Error creating history record:', error);
       return { data: null, error };
