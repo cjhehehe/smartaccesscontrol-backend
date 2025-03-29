@@ -13,7 +13,8 @@ export const addHistoryRecord = async (req, res) => {
       room_id,
       guest_id,
       rfid_id,
-      check_in,
+      registration_time, // NEW: registration time provided by client (or set by system)
+      // check_in is not required at registration; will be updated later
       check_out,
       hours_stay,
       check_out_reason,
@@ -22,10 +23,10 @@ export const addHistoryRecord = async (req, res) => {
       mac_addresses_snapshot,
     } = req.body;
 
-    if (!room_id || !guest_id || !check_in) {
+    if (!room_id || !guest_id || !registration_time) {
       return res.status(400).json({
         success: false,
-        message: 'Missing required fields: room_id, guest_id, and check_in',
+        message: 'Missing required fields: room_id, guest_id, and registration_time',
       });
     }
 
@@ -33,7 +34,8 @@ export const addHistoryRecord = async (req, res) => {
       room_id,
       guest_id,
       rfid_id: rfid_id || null,
-      check_in,
+      registration_time, // stored at registration
+      check_in: null,    // will be updated when guest scans the door
       check_out: check_out || null,
       hours_stay: hours_stay || null,
       check_out_reason: check_out_reason || null,
@@ -125,7 +127,7 @@ export const getHistoryRecord = async (req, res) => {
 export const updateHistoryRecord = async (req, res) => {
   try {
     const { id } = req.params;
-    const updateData = req.body; // Contains fields to update (e.g., rfid_id, check_out, check_out_reason, was_early_checkout, occupant_snapshot, mac_addresses_snapshot, hours_stay)
+    const updateData = req.body; // Fields to update, e.g., rfid_id, check_in, check_out, etc.
     
     if (!id) {
       return res.status(400).json({
