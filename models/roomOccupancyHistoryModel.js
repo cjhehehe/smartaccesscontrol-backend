@@ -53,6 +53,24 @@ export const getHistoryRecordById = async (id) => {
   }
 };
 
+export const updateHistoryRecord = async (id, updateData) => {
+  try {
+    const { data, error } = await supabase
+      .from('room_occupancy_history')
+      .update(updateData)
+      .eq('id', id)
+      .single();
+    if (error) {
+      console.error('[RoomOccupancyHistoryModel] Error updating history record:', error);
+      return { data: null, error };
+    }
+    return { data, error: null };
+  } catch (err) {
+    console.error('[RoomOccupancyHistoryModel] Unexpected error in updateHistoryRecord:', err);
+    return { data: null, error: err };
+  }
+};
+
 export const searchHistoryRecords = async (query) => {
   try {
     const { data, error } = await supabase
