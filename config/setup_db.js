@@ -4,7 +4,7 @@ import supabase from './supabase.js'; // Adjust path if needed
  * resetDatabase()
  *
  * Clears or resets specific tables/columns to an initial state:
- *  - Removes data from certain tables (access_logs, activity_logs, feedback_complaints, notifications, service_requests, mac_addresses)
+ *  - Removes data from certain tables (access_logs, activity_logs, feedback_complaints, notifications, service_requests, mac_addresses, room_occupancy_history)
  *  - Leaves some tables intact (admins, guests, membership_perks, system_settings)
  *  - Resets 'rooms' to status='available' with null guest_id, hours_stay, registration_time, check_in, and check_out
  *  - Resets 'rfid_tags' to status='available' with null guest_id
@@ -126,7 +126,18 @@ export async function resetDatabase() {
     console.log('[SETUP] mac_addresses cleared.');
   }
 
-  // 13) Reset ID sequences for cleared tables
+  // 13) room_occupancy_history: Remove all data
+  ({ error } = await supabase
+    .from('room_occupancy_history')
+    .delete()
+    .gt('id', 0));
+  if (error) {
+    console.error('[SETUP] Error clearing room_occupancy_history:', error);
+  } else {
+    console.log('[SETUP] room_occupancy_history cleared.');
+  }
+
+  // 14) Reset ID sequences for cleared tables
   const { error: resetSeqError } = await supabase.rpc('reset_id_sequences');
   if (resetSeqError) {
     console.error('[SETUP] Error resetting ID sequences:', resetSeqError);
