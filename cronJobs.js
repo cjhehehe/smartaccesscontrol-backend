@@ -152,7 +152,7 @@ cron.schedule('*/1 * * * *', async () => {
           // by guest_id + room_id + check_out IS NULL
           const occupantRecord = await findOpenOccupancyRecord(room.guest_id, room.id);
           if (occupantRecord) {
-            // Step C: Check out that occupant record
+            // Step C: Check out that occupant record (creates occupant check-out event)
             await checkOutOccupancyHistory(occupantRecord.id, "Auto Check-Out");
           } else {
             console.log(`[cronJobs] No open occupant record found for guest_id=${room.guest_id} & room_id=${room.id}`);

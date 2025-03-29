@@ -321,37 +321,59 @@ export const checkInHistory = async (req, res) => {
  * POST /api/room-occupancy-history/:id/checkout
  * "Check-out" the occupancy record:
  *   - Sets check_out to now or the provided time
- *   - Sets was_early_checkout if needed
- *   - Sets check_out_reason if provided
+ *   - Computes was_early_checkout automatically
+ *   - Sets check_out_reason based on method
  */
 export const checkOutHistory = async (req, res) => {
   try {
     const { id } = req.params;
     const {
-      check_out,
-      check_out_reason,
-      was_early_checkout,
+      check_out: providedCheckOut, // optional override
+      check_out_reason: clientReason, // e.g. "Early Check-Out" or "Auto Check-Out"
     } = req.body;
 
-    const checkOutTime = check_out || new Date().toISOString();
+    // Use now() as fallback if check_out is not provided
+    const checkOutTime = providedCheckOut || new Date().toISOString();
 
-    const { data, error } = await checkOutOccupancyRecord(
-      id,
-      checkOutTime,
-      check_out_reason,
-      was_early_checkout
-    );
-    if (error) {
+    // Step 1: Fetch the existing record to compare scheduled vs. actual checkout time
+    const { data: existingRecord, error: fetchError } = await getHistoryRecordById(id);
+    if (fetchError) {
       return res.status(500).json({
         success: false,
-        message: 'Error performing occupancy check-out',
-        error: error.message,
+        message: 'Error fetching occupancy record for check-out',
+        error: fetchError.message,
       });
     }
-    if (!data) {
+    if (!existingRecord) {
       return res.status(404).json({
         success: false,
-        message: 'Room occupancy history record not found',
+        message: 'Occupancy record not found',
+      });
+    }
+
+    // Step 2: Determine if this is early checkout
+    let wasEarly = false;
+    if (existingRecord.check_out) {
+      const expected = new Date(existingRecord.check_out).getTime();
+      const actual = new Date(checkOutTime).getTime();
+      wasEarly = actual < expected;
+    }
+
+    // Step 3: Default reason if none passed in
+    const reason = clientReason || (wasEarly ? 'Early Check-Out' : 'Auto Check-Out');
+
+    // Step 4: Update the record
+    const { data, error: updateError } = await checkOutOccupancyRecord(
+      id,
+      checkOutTime,
+      reason,
+      wasEarly
+    );
+    if (updateError) {
+      return res.status(500).json({
+        success: false,
+        message: 'Error updating occupancy record for check-out',
+        error: updateError.message,
       });
     }
 
