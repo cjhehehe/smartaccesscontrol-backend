@@ -85,7 +85,12 @@ export const addRoom = async (req, res) => {
 
 /**
  * PUT /api/rooms/assign
- * Assign (reserve) a room by room_number (status -> 'reserved').
+ * Assign (reserve) a room by room_number.
+ * 
+ * New logic:
+ *  1. Find the room by room_number.
+ *  2. If found, check that the room’s status is "available".
+ *  3. If available, update the room with guest_id, hours_stay, registration_time, and set status to "reserved".
  */
 export const assignRoomByNumber = async (req, res) => {
   try {
@@ -105,6 +110,31 @@ export const assignRoomByNumber = async (req, res) => {
       });
     }
 
+    // First, find the room by number
+    const { data: room, error: findError } = await findRoomByNumber(room_number);
+    if (findError) {
+      console.error('[Rooms] Error finding room by number:', findError);
+      return res.status(500).json({
+        success: false,
+        message: 'Database error: Could not find room.',
+        error: findError.message,
+      });
+    }
+    if (!room) {
+      return res.status(404).json({
+        success: false,
+        message: `Room ${room_number} not found.`,
+      });
+    }
+
+    // Ensure the room is available before assigning
+    if (room.status !== 'available') {
+      return res.status(400).json({
+        success: false,
+        message: `Room ${room_number} is not available.`,
+      });
+    }
+
     const updateFields = {
       guest_id,
       hours_stay: numericHoursStay,
@@ -112,8 +142,9 @@ export const assignRoomByNumber = async (req, res) => {
       registration_time: new Date().toISOString(),
     };
 
+    // Update the room record without additional filtering (we already checked availability)
     const { data, error } = await updateRoomByNumber(room_number, updateFields, {
-      onlyIfAvailable: true,
+      onlyIfAvailable: false,
     });
     if (error) {
       console.error('[Rooms] Error updating room by number:', error);
@@ -126,7 +157,7 @@ export const assignRoomByNumber = async (req, res) => {
     if (!data) {
       return res.status(400).json({
         success: false,
-        message: `No available room found with room_number = ${room_number}`,
+        message: `No room found with room_number = ${room_number}`,
       });
     }
 
@@ -277,9 +308,8 @@ export const roomCheckIn = async (req, res) => {
 /**
  * POST /api/rooms/:id/checkout
  * Early check-out (manual check-out):
- *   - We clear occupant fields (setting the room to 'available').
- *   - We do NOT want the "Room not found" error if the row is successfully updated.
- *   - We also call the Pi-based /api/deactivate-internet to remove occupant from the Wi-Fi whitelist.
+ *   - Clears occupant fields (setting the room to 'available').
+ *   - Calls the Pi-based /api/deactivate-internet endpoint to remove the occupant from the Wi-Fi whitelist.
  */
 export const roomCheckOut = async (req, res) => {
   try {
@@ -301,9 +331,9 @@ export const roomCheckOut = async (req, res) => {
 
     // occupantId is the original occupant's guest_id
     const updatedRoom = result.data;
-    const occupantId = result.occupantId; // We will add occupantId in the model’s return object
+    const occupantId = result.occupantId; // Returned from the model
 
-    // If occupantId is present, call the Pi-based /api/deactivate-internet
+    // If occupantId is present, call the Pi-based /api/deactivate-internet endpoint
     if (occupantId) {
       try {
         const mikrotikApiUrl =
@@ -364,7 +394,7 @@ export const updateRoomStatusByNumber = async (req, res) => {
       });
     }
 
-    // Disallow changing from 'occupied' -> anything else unless the guest is checked out
+    // Disallow changing from 'occupied' to anything else unless guest is checked out
     if (existingRoom.status === 'occupied' && status !== 'occupied') {
       return res.status(400).json({
         success: false,
@@ -390,9 +420,6 @@ export const updateRoomStatusByNumber = async (req, res) => {
         message: `Room ${room_number} could not be updated.`,
       });
     }
-
-    // Optionally notify occupant if there's a guest_id
-    // (notification logic omitted here)
 
     return res.status(200).json({
       success: true,
