@@ -1,74 +1,83 @@
 // controllers/accessLogsController.js
+
 import {
   saveAccessGranted,
   saveAccessDenied,
   getAccessLogs,
+  // getRecentDenialsForRFID // (Optional – not used for alerts here)
 } from '../models/accessLogModel.js';
 
 /**
  * Log Access Granted
+ * Logs a successful access event with RFID UID, Guest ID, timestamp, and measured latency.
  */
 export const logAccessGranted = async (req, res) => {
   try {
-    const { rfid_uid, guest_id } = req.body;
+    const { rfid_uid, guest_id, latency } = req.body;
     if (!rfid_uid || !guest_id) {
       return res.status(400).json({
         success: false,
-        message: 'RFID UID and Guest ID are required',
+        message: 'RFID UID and Guest ID are required'
       });
     }
-    // Generate UTC timestamp
     const timestamp = new Date().toISOString();
-
-    const { data, error } = await saveAccessGranted(rfid_uid, guest_id, timestamp);
+    const { data, error } = await saveAccessGranted(rfid_uid, guest_id, timestamp, latency);
     if (error) {
+      console.error('[logAccessGranted] Database error:', error);
       return res.status(500).json({
         success: false,
         message: 'Database error: Unable to log access granted',
         error: error.message,
       });
     }
-    return res
-      .status(201)
-      .json({ success: true, message: 'Access granted saved successfully', data });
+    return res.status(201).json({
+      success: true,
+      message: 'Access granted saved successfully',
+      data
+    });
   } catch (error) {
-    console.error('Unexpected Error in logAccessGranted:', error);
+    console.error('[logAccessGranted] Unexpected error:', error);
     return res.status(500).json({ success: false, message: 'Internal server error' });
   }
 };
 
 /**
  * Log Access Denied
+ * Logs a denied access event with RFID UID, timestamp, and measured latency.
  */
 export const logAccessDenied = async (req, res) => {
   try {
-    const { rfid_uid } = req.body;
+    const { rfid_uid, latency } = req.body;
     if (!rfid_uid) {
       return res.status(400).json({
         success: false,
-        message: 'RFID UID is required',
+        message: 'RFID UID is required'
       });
     }
     const timestamp = new Date().toISOString();
-    const { data, error } = await saveAccessDenied(rfid_uid, timestamp);
+    const { data, error } = await saveAccessDenied(rfid_uid, timestamp, latency);
     if (error) {
+      console.error('[logAccessDenied] Database error:', error);
       return res.status(500).json({
         success: false,
         message: 'Database error: Unable to log access denied',
         error: error.message,
       });
     }
-    return res
-      .status(201)
-      .json({ success: true, message: 'Access denied saved successfully', data });
+    return res.status(201).json({
+      success: true,
+      message: 'Access denied saved successfully',
+      data
+    });
   } catch (error) {
-    console.error('Unexpected Error in logAccessDenied:', error);
+    console.error('[logAccessDenied] Unexpected error:', error);
     return res.status(500).json({ success: false, message: 'Internal server error' });
   }
 };
 
 /**
  * Get Access Logs for a Given Guest ID
+ * Retrieves paginated access log entries (including latency data) for the specified guest.
  */
 export const getAccessLogsByGuest = async (req, res) => {
   try {
@@ -77,29 +86,25 @@ export const getAccessLogsByGuest = async (req, res) => {
     if (!guest_id) {
       return res.status(400).json({
         success: false,
-        message: 'Guest ID is required',
+        message: 'Guest ID is required'
       });
     }
-    const { data, error } = await getAccessLogs(
-      guest_id,
-      parseInt(limit),
-      parseInt(offset)
-    );
+    const { data, error } = await getAccessLogs(guest_id, parseInt(limit), parseInt(offset));
     if (error) {
+      console.error('[getAccessLogsByGuest] Database error:', error);
       return res.status(500).json({
         success: false,
         message: 'Database error: Unable to fetch access logs',
         error: error.message,
       });
     }
-    // Even if no logs are found, return an empty array.
     return res.status(200).json({
       success: true,
       message: 'Access logs fetched successfully',
       data: data || [],
     });
   } catch (error) {
-    console.error('Unexpected Error in getAccessLogsByGuest:', error);
+    console.error('[getAccessLogsByGuest] Unexpected error:', error);
     return res.status(500).json({ success: false, message: 'Internal server error' });
   }
 };
