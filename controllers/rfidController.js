@@ -14,6 +14,9 @@ import supabase from '../config/supabase.js';
 import { findRoomByGuestAndNumber } from '../models/roomsModel.js';
 import fetch from 'node-fetch';  // For calling Pi-based endpoints
 
+// Define a consistent backend base URL
+const BACKEND_BASE_URL = process.env.BACKEND_BASE_URL || "https://smartaccesscontrol-backend-production.up.railway.app/api";
+
 // -----------------------------------------------------------------------------
 //  1) GET /api/rfid/all
 // -----------------------------------------------------------------------------
@@ -504,8 +507,7 @@ export const verifyRFID = async (req, res) => {
         });
       }
       roomData = occupiedRoom;
-    }
-    else if (roomData.status === 'occupied') {
+    } else if (roomData.status === 'occupied') {
       if (roomData.check_out) {
         const now = new Date();
         const checkOutTime = new Date(roomData.check_out);
