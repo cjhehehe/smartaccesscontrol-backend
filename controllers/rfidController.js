@@ -12,7 +12,7 @@ import {
 import { findUserById } from '../models/userModel.js';
 import supabase from '../config/supabase.js';
 import { findRoomByGuestAndNumber } from '../models/roomsModel.js';
-import fetch from 'node-fetch';  // for calling Pi-based or other endpoints
+import fetch from 'node-fetch';  // For calling Pi-based endpoints
 
 // -----------------------------------------------------------------------------
 //  1) GET /api/rfid/all
@@ -298,7 +298,7 @@ export const updateRFIDStatus = async (req, res) => {
       });
     }
 
-    // 2) If the RFID is already in the desired status, return current data
+    // 2) If RFID is already in desired status, return it
     const oldStatus = (rfidRecord.status || '').toLowerCase();
     const newStatus = status.toLowerCase();
     if (oldStatus === newStatus) {
@@ -309,7 +309,7 @@ export const updateRFIDStatus = async (req, res) => {
       });
     }
 
-    // 3) Update status
+    // 3) Update status based on newStatus
     let updatedData = null;
     if (newStatus === 'available') {
       const { data, error } = await unassignRFID(rfid_uid);
@@ -362,7 +362,7 @@ export const updateRFIDStatus = async (req, res) => {
 
 // -----------------------------------------------------------------------------
 //  8) POST /api/rfid/verify
-//    - Original door-access verification logic
+//    - Door-access verification logic
 // -----------------------------------------------------------------------------
 export const verifyRFID = async (req, res) => {
   try {
@@ -374,7 +374,7 @@ export const verifyRFID = async (req, res) => {
       });
     }
 
-    // 1) Fetch the RFID record
+    // 1) Fetch RFID record
     let { data: rfidData, error: rfidError } = await findRFIDByUID(rfid_uid);
     if (rfidError) {
       console.error('[verifyRFID] Error finding RFID:', rfidError);
@@ -390,7 +390,7 @@ export const verifyRFID = async (req, res) => {
       });
     }
 
-    // 2) Validate RFID status (only 'assigned' or 'active' are allowed)
+    // 2) Validate status (only 'assigned' or 'active' allowed)
     if (!['assigned', 'active'].includes(rfidData.status)) {
       return res.status(403).json({
         success: false,
@@ -398,7 +398,7 @@ export const verifyRFID = async (req, res) => {
       });
     }
 
-    // 3) Ensure the RFID is linked to a guest
+    // 3) Ensure RFID is linked to a guest
     if (!rfidData.guest_id) {
       return res.status(403).json({
         success: false,
@@ -406,7 +406,7 @@ export const verifyRFID = async (req, res) => {
       });
     }
 
-    // 3a) Fetch the guest
+    // 3a) Fetch guest
     const { data: guestData, error: guestError } = await findUserById(rfidData.guest_id);
     if (guestError) {
       console.error('[verifyRFID] Error finding guest:', guestError);
@@ -422,7 +422,7 @@ export const verifyRFID = async (req, res) => {
       });
     }
 
-    // 4) Auto-detect room if none is provided
+    // 4) Auto-detect room if not provided
     let targetRoomNumber = room_number;
     if (!targetRoomNumber) {
       const { data: possibleRooms, error: fetchError } = await supabase
@@ -449,7 +449,7 @@ export const verifyRFID = async (req, res) => {
       targetRoomNumber = possibleRooms[0].room_number;
     }
 
-    // 5) Fetch the relevant room record
+    // 5) Fetch relevant room record
     let { data: roomData, error: roomError } = await findRoomByGuestAndNumber(rfidData.guest_id, targetRoomNumber);
     if (roomError) {
       console.error('[verifyRFID] Error checking room reservation:', roomError);
@@ -465,7 +465,7 @@ export const verifyRFID = async (req, res) => {
       });
     }
 
-    // 5a) If the room status is 'available', the guest has already checked out
+    // 5a) If room status is 'available', guest already checked out
     if (roomData.status === 'available') {
       return res.status(403).json({
         success: false,
@@ -496,7 +496,6 @@ export const verifyRFID = async (req, res) => {
         .eq('id', roomData.id)
         .select('*')
         .single();
-
       if (checkInError) {
         console.error('[verifyRFID] Error updating room to occupied:', checkInError);
         return res.status(500).json({
@@ -507,7 +506,6 @@ export const verifyRFID = async (req, res) => {
       roomData = occupiedRoom;
     }
     else if (roomData.status === 'occupied') {
-      // Ensure current time < check_out
       if (roomData.check_out) {
         const now = new Date();
         const checkOutTime = new Date(roomData.check_out);
@@ -538,7 +536,6 @@ export const verifyRFID = async (req, res) => {
     // 8) Create or find occupant record in room_occupancy_history
     let occupantRecordId = null;
     try {
-      // Check for open occupant record
       const { data: existingOcc, error: occErr } = await supabase
         .from('room_occupancy_history')
         .select('*')
@@ -549,7 +546,6 @@ export const verifyRFID = async (req, res) => {
       if (!occErr && existingOcc) {
         occupantRecordId = existingOcc.id;
       } else {
-        // Create new occupant record
         const occupantSnapshot = {
           name: guestData.name,
           email: guestData.email,
@@ -575,8 +571,7 @@ export const verifyRFID = async (req, res) => {
         }
       }
     } catch (err) {
-      console.error('[verifyRFID] occupant creation error:', err);
-      // Not fatal
+      console.error('[verifyRFID] Occupant creation error:', err);
     }
 
     return res.status(200).json({
@@ -600,22 +595,15 @@ export const verifyRFID = async (req, res) => {
 
 // -----------------------------------------------------------------------------
 //  9) GET /api/rfid/valid-cards
-//     Return a dictionary of RFID -> minimal guest data for local caching
+//     Return a dictionary of RFID -> minimal data for local caching
 // -----------------------------------------------------------------------------
 export const getValidRFIDCards = async (req, res) => {
   try {
-    // 1) Fetch all RFID tags that are in 'assigned' or 'active' status and joined with a valid guest
+    // Fetch RFID tags that are 'assigned' or 'active'
     const { data, error } = await supabase
       .from('rfid_tags')
-      .select(`
-        rfid_uid,
-        status,
-        guest_id,
-        guests ( id, name, email, phone, membership_level )
-      `)
-      .in('status', ['assigned', 'active'])
-      .neq('guest_id', null);
-
+      .select('rfid_uid, guest_id, status')
+      .in('status', ['assigned', 'active']);
     if (error) {
       console.error('[getValidRFIDCards] Error fetching valid RFID tags:', error);
       return res.status(500).json({
@@ -623,24 +611,14 @@ export const getValidRFIDCards = async (req, res) => {
         message: 'Database error: Unable to fetch valid RFID tags.',
       });
     }
-
-    // 2) Build a dictionary { rfid_uid: { guest_id, name, email, phone, membership_level } }
+    // Build a simple dictionary mapping rfid_uid -> RFID record
     const result = {};
-    for (const row of data) {
-      if (!row.guest_id || !row.guests) continue;
-      const g = row.guests;
-      result[row.rfid_uid] = {
-        guest_id: g.id,
-        name: g.name,
-        email: g.email,
-        phone: g.phone,
-        membership_level: g.membership_level || 'Regular',
-      };
-    }
-
+    data.forEach(row => {
+      result[row.rfid_uid] = row;
+    });
     return res.status(200).json({
       success: true,
-      message: 'Valid RFID→Guest mappings fetched successfully.',
+      message: 'Valid RFID mappings fetched successfully.',
       data: result,
     });
   } catch (err) {
@@ -654,8 +632,7 @@ export const getValidRFIDCards = async (req, res) => {
 
 // -----------------------------------------------------------------------------
 // 10) POST /api/rfid/post-verify-actions
-//     A single consolidated endpoint that the Pi calls after local or remote verification
-//     to handle occupant check-in, store leases, activate internet, logging, etc.
+//     Consolidated endpoint to process occupancy check-in, store leases, activate internet, and log access.
 // -----------------------------------------------------------------------------
 export const postVerifyActions = async (req, res) => {
   try {
@@ -666,11 +643,10 @@ export const postVerifyActions = async (req, res) => {
         message: 'rfid_uid is required.',
       });
     }
-
     // 1) Look up the RFID record
     const { data: rfidData, error: rfidErr } = await findRFIDByUID(rfid_uid);
     if (rfidErr) {
-      console.error('[postVerifyActions] findRFID error:', rfidErr);
+      console.error('[postVerifyActions] Error finding RFID:', rfidErr);
       return res.status(500).json({
         success: false,
         message: 'Database error: Could not find RFID.',
@@ -689,36 +665,33 @@ export const postVerifyActions = async (req, res) => {
       });
     }
 
-    // 2) Optionally find occupant record in room_occupancy_history that is still open
+    // 2) Optionally find an open occupant record
     let occupant = null;
     let occupantId = null;
     try {
-      const { data: occupantRec, error: occupantErr } = await supabase
+      const { data: occData, error: occErr } = await supabase
         .from('room_occupancy_history')
         .select('*')
         .eq('guest_id', rfidData.guest_id)
         .eq('rfid_id', rfidData.id)
         .is('check_out', null)
         .maybeSingle();
-
-      if (!occupantErr && occupantRec) {
-        occupant = occupantRec;
-        occupantId = occupantRec.id;
+      if (!occErr && occData) {
+        occupant = occData;
+        occupantId = occData.id;
       }
     } catch (err) {
-      console.error('[postVerifyActions] occupant fetch error:', err);
+      console.error('[postVerifyActions] Occupant fetch error:', err);
     }
 
-    // 3) Check in occupant if occupantId found & occupant.check_in is null
+    // 3) Check in occupant if applicable
     const occupantCheckIn = async () => {
       if (!occupantId || !occupant) return 'No occupant record found.';
       if (occupant.check_in) return 'Occupant already checked in.';
       const url = `${process.env.BASE_URL}/room-occupancy-history/${occupantId}/checkin`;
-      // fallback if no env var
       const finalUrl = url.includes('undefined')
         ? `${BACKEND_BASE_URL}/room-occupancy-history/${occupantId}/checkin`
         : url;
-
       try {
         const resp = await fetch(finalUrl, {
           method: 'POST',
@@ -731,13 +704,12 @@ export const postVerifyActions = async (req, res) => {
         }
         return 'Occupant check-in successful.';
       } catch (err) {
-        console.error('[postVerifyActions] occupantCheckIn error:', err);
+        console.error('[postVerifyActions] Occupant check-in error:', err);
         return `Occupant check-in error: ${err.message}`;
       }
     };
 
-    // 4) Store leases => calls the Pi-based server: /api/store-leases
-    //    Make sure your Pi server is accessible via an environment variable
+    // 4) Store leases via Pi-based endpoint
     const storeLeases = async () => {
       const piGatewayUrl = process.env.PI_GATEWAY_BASE_URL || 'http://127.0.0.1:3000/api';
       try {
@@ -758,30 +730,24 @@ export const postVerifyActions = async (req, res) => {
         }
         return 'Store leases succeeded.';
       } catch (err) {
-        console.error('[postVerifyActions] storeLeases error:', err);
+        console.error('[postVerifyActions] Store leases error:', err);
         return `Store leases error: ${err.message}`;
       }
     };
 
-    // 5) Activate internet => calls the Pi-based server: /api/activate-internet
-    //    Only do this if occupant has check_in & check_out
+    // 5) Activate internet via Pi-based endpoint (if occupant data is available)
     const activateInternet = async () => {
       if (!occupant || !occupant.check_in || !occupant.hours_stay) {
-        return 'No check_in or hours_stay => skipping activateInternet.';
+        return 'No check_in or hours_stay; skipping internet activation.';
       }
-      // occupant.check_in => occupant's actual check_in time
-      // occupant.check_out => might be null if not set yet, or we can compute it
-      // For demonstration, you can look up the room's check_out time if needed
       let checkInIso = occupant.check_in;
       let checkOutIso = occupant.check_out;
       if (!checkOutIso) {
-        // If occupant has no check_out yet, guess from occupant.hours_stay
         const checkInTime = new Date(checkInIso);
         const hoursStay = parseFloat(occupant.hours_stay) || 1;
         const out = new Date(checkInTime.getTime() + hoursStay * 3600000);
         checkOutIso = out.toISOString();
       }
-
       const piGatewayUrl = process.env.PI_GATEWAY_BASE_URL || 'http://127.0.0.1:3000/api';
       try {
         const resp = await fetch(`${piGatewayUrl}/activate-internet`, {
@@ -802,12 +768,12 @@ export const postVerifyActions = async (req, res) => {
         }
         return 'Internet activated successfully.';
       } catch (err) {
-        console.error('[postVerifyActions] activateInternet error:', err);
+        console.error('[postVerifyActions] Activate internet error:', err);
         return `Activate internet error: ${err.message}`;
       }
     };
 
-    // 6) Log success => optionally call /api/access-logs/granted
+    // 6) Log access via endpoint /access-logs/granted
     const logAccess = async () => {
       try {
         const resp = await fetch(`${BACKEND_BASE_URL}/access-logs/granted`, {
@@ -821,12 +787,12 @@ export const postVerifyActions = async (req, res) => {
         }
         return 'Access log saved.';
       } catch (err) {
-        console.error('[postVerifyActions] logAccess error:', err);
+        console.error('[postVerifyActions] Log access error:', err);
         return `Log access error: ${err.message}`;
       }
     };
 
-    // 7) Execute everything in parallel
+    // 7) Execute all post-verification tasks in parallel
     const [checkInMsg, leaseMsg, netMsg, logMsg] = await Promise.all([
       occupantCheckIn(),
       storeLeases(),

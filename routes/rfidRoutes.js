@@ -1,4 +1,5 @@
 // routes/rfidRoutes.js
+
 import express from 'express';
 import {
   getAllRFIDTags,
@@ -9,7 +10,6 @@ import {
   unassignRFIDTag,
   verifyRFID,
   updateRFIDStatus,
-  // NEW endpoints
   getValidRFIDCards,
   postVerifyActions,
 } from '../controllers/rfidController.js';
@@ -19,7 +19,7 @@ const router = express.Router();
 // GET all RFID tags
 router.get('/all', getAllRFIDTags);
 
-// GET RFID tags that are 'available'
+// GET available RFID tags
 router.get('/available', getAvailableRFIDTags);
 
 // POST: Assign an RFID to a guest
@@ -28,16 +28,16 @@ router.post('/assign', assignRFID);
 // POST: Activate an assigned RFID
 router.post('/activate', activateRFIDTag);
 
-// POST: Mark RFID as lost
+// POST: Mark an RFID as lost
 router.post('/lost', markRFIDAsLost);
 
-// POST: Unassign RFID (status -> 'available')
+// POST: Unassign an RFID (set to available)
 router.post('/unassign', unassignRFIDTag);
 
 // POST: Verify an RFID for door access
 router.post('/verify', verifyRFID);
 
-// PUT: Unified status update route
+// PUT: Update RFID status
 router.put('/update-status', updateRFIDStatus);
 
 // NEW: GET: Valid RFID→Guest mappings for local caching
