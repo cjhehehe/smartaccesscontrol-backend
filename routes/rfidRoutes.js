@@ -8,7 +8,10 @@ import {
   markRFIDAsLost,
   unassignRFIDTag,
   verifyRFID,
-  updateRFIDStatus
+  updateRFIDStatus,
+  // NEW endpoints
+  getValidRFIDCards,
+  postVerifyActions,
 } from '../controllers/rfidController.js';
 
 const router = express.Router();
@@ -36,5 +39,11 @@ router.post('/verify', verifyRFID);
 
 // PUT: Unified status update route
 router.put('/update-status', updateRFIDStatus);
+
+// NEW: GET: Valid RFID→Guest mappings for local caching
+router.get('/valid-cards', getValidRFIDCards);
+
+// NEW: POST: Consolidated post-verification actions
+router.post('/post-verify-actions', postVerifyActions);
 
 export default router;
