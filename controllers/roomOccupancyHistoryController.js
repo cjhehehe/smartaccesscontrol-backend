@@ -157,7 +157,7 @@ export const searchHistory = async (req, res) => {
   }
 };
 
-// The check-in and check-out endpoints remain for updating existing records.
+// The check-in and check-out endpoints below remain for updating existing records.
 const ensureOccupantRecord = async (id, reqBody) => {
   // If you truly want to prevent creation outside hotelController,
   // you could leave this blank or return an error if record doesn't exist.

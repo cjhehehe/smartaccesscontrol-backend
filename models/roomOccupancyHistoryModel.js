@@ -3,9 +3,11 @@ import supabase from '../config/supabase.js';
 
 export const createHistoryRecord = async (recordData) => {
   try {
+    // Adding .select('*') to have Supabase return the inserted row
     const { data, error } = await supabase
       .from('room_occupancy_history')
       .insert([recordData])
+      .select('*')
       .single();
     if (error) {
       console.error('[RoomOccupancyHistoryModel] Error creating history record:', error);
@@ -59,6 +61,7 @@ export const updateHistoryRecord = async (id, updateData) => {
       .from('room_occupancy_history')
       .update(updateData)
       .eq('id', id)
+      .select('*')
       .single();
     if (error) {
       console.error('[RoomOccupancyHistoryModel] Error updating history record:', error);
@@ -109,6 +112,7 @@ export const checkInOccupancyRecord = async (id, checkInTime, hoursStay) => {
       .from('room_occupancy_history')
       .update(updateData)
       .eq('id', id)
+      .select('*')
       .single();
     if (error) {
       console.error('[RoomOccupancyHistoryModel] Error in checkInOccupancyRecord:', error);
@@ -144,6 +148,7 @@ export const checkOutOccupancyRecord = async (id, checkOutTime, checkOutReason, 
       .from('room_occupancy_history')
       .update(updateData)
       .eq('id', id)
+      .select('*')
       .single();
     if (error) {
       console.error('[RoomOccupancyHistoryModel] Error in checkOutOccupancyRecord:', error);
