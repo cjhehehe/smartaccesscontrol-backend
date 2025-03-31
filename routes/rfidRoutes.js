@@ -40,10 +40,10 @@ router.post('/verify', verifyRFID);
 // PUT: Update RFID status
 router.put('/update-status', updateRFIDStatus);
 
-// NEW: GET: Valid RFID→Guest mappings for local caching
+// GET: Valid RFID→Guest mappings for local caching
 router.get('/valid-cards', getValidRFIDCards);
 
-// NEW: POST: Consolidated post-verification actions
+// POST: Consolidated post-verification actions
 router.post('/post-verify-actions', postVerifyActions);
 
 export default router;

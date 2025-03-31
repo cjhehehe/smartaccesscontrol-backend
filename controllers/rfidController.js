@@ -312,7 +312,7 @@ export const updateRFIDStatus = async (req, res) => {
       });
     }
 
-    // 3) Update status
+    // 3) Update status accordingly
     let updatedData = null;
     if (newStatus === 'available') {
       const { data, error } = await unassignRFID(rfid_uid);
@@ -324,8 +324,8 @@ export const updateRFIDStatus = async (req, res) => {
         .update({ status: 'assigned' })
         .eq('rfid_uid', rfid_uid)
         .neq('status', 'assigned')
-        .select('id, rfid_uid, guest_id, status')
-        .single();
+        .select('id, rfid_uid, guest_id, status, room_number')
+        .maybeSingle();
       if (error) {
         console.error('[updateRFIDStatus] Error setting RFID assigned:', error);
         return res.status(500).json({
@@ -525,13 +525,20 @@ export const verifyRFID = async (req, res) => {
     if (rfidData.status === 'assigned') {
       const { data: updatedRFID, error: activationError } = await activateRFID(rfid_uid);
       if (activationError) {
-        console.error('[verifyRFID] Error activating RFID:', activationError);
-        return res.status(500).json({
-          success: false,
-          message: 'Error activating RFID.',
-        });
+        // Log the error, but if it contains "PGRST116", ignore it.
+        const errMsg = activationError.message || "";
+        if (errMsg.includes("PGRST116")) {
+          console.warn(`[verifyRFID] activateRFID returned PGRST116 for RFID ${rfid_uid}; ignoring error.`);
+        } else {
+          console.error('[verifyRFID] Error activating RFID:', activationError);
+          return res.status(500).json({
+            success: false,
+            message: 'Error activating RFID.',
+          });
+        }
+      } else {
+        rfidData = updatedRFID;
       }
-      rfidData = updatedRFID;
     }
 
     // 8) Create or find occupant record in room_occupancy_history
@@ -575,7 +582,6 @@ export const verifyRFID = async (req, res) => {
       console.error('[verifyRFID] Occupant creation error:', err);
     }
 
-    // If occupantRecordId is undefined, set to null
     if (occupantRecordId === undefined) {
       occupantRecordId = null;
     }
@@ -607,7 +613,7 @@ export const getValidRFIDCards = async (req, res) => {
     // Fetch RFID tags that are 'assigned' or 'active'
     const { data, error } = await supabase
       .from('rfid_tags')
-      .select('rfid_uid, guest_id, status')
+      .select('rfid_uid, guest_id, status, room_number')
       .in('status', ['assigned', 'active']);
     if (error) {
       console.error('[getValidRFIDCards] Error fetching valid RFID tags:', error);
@@ -616,7 +622,7 @@ export const getValidRFIDCards = async (req, res) => {
         message: 'Database error: Unable to fetch valid RFID tags.',
       });
     }
-    // Build a simple dictionary mapping rfid_uid -> RFID record
+    // Build a dictionary mapping rfid_uid -> RFID record
     const result = {};
     data.forEach(row => {
       result[row.rfid_uid] = row;
