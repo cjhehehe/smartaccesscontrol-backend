@@ -3,7 +3,6 @@ import supabase from '../config/supabase.js';
 
 export const createHistoryRecord = async (recordData) => {
   try {
-    // recordData may already include an event_indicator (e.g. "registered")
     const { data, error } = await supabase
       .from('room_occupancy_history')
       .insert([recordData])
@@ -104,7 +103,7 @@ export const checkInOccupancyRecord = async (id, checkInTime, hoursStay) => {
     if (existing.check_in) {
       console.warn(`[checkInOccupancyRecord] Overriding existing check_in for ID=${id}`);
     }
-    // Update check_in time and set event_indicator to "checkin"
+    // Update check_in time and change event_indicator to "checkin"
     const updateData = {
       check_in: checkInTime,
       event_indicator: "checkin"

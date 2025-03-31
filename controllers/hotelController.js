@@ -2,12 +2,11 @@
 import { findRoomByNumber, updateRoomByNumber } from '../models/roomsModel.js';
 import { getAvailableRFIDs, assignRFIDToGuest, findRFIDByUID, getAllRFIDs } from '../models/rfidModel.js';
 import { createHistoryRecord, getAllHistoryRecords } from '../models/roomOccupancyHistoryModel.js';
+// Import a helper to fetch guest data so we can populate occupant_snapshot
 import { findUserById } from '../models/userModel.js'; // Adjust path as needed
 
 /**
  * Helper function to assign a room by number.
- * It validates the hours of stay, ensures the room exists and is available,
- * and then reserves the room by updating its record.
  */
 const assignRoomByNumberModel = async (room_number, guest_id, hours_stay) => {
   const numericHoursStay = parseFloat(hours_stay);
@@ -41,13 +40,11 @@ const assignRoomByNumberModel = async (room_number, guest_id, hours_stay) => {
 
 /**
  * POST /api/hotel/register-flow
- * Performs the entire "hotel registration" flow in one call:
- *  - Checks for an existing open occupancy record to prevent duplicates.
+ * Unified endpoint to register a guest:
+ *  - Checks for an existing open occupancy record.
  *  - Assigns the room.
- *  - Retrieves available RFID cards and, if necessary, falls back to all RFIDs.
- *  - If the RFID is available, it assigns the RFID to the guest.
- *  - Finally, it creates the room occupancy history record (the only place where this record is created),
- *    and sets the event_indicator to "registered".
+ *  - Retrieves available RFIDs and assigns one.
+ *  - Creates the occupancy record with event_indicator set to "registered".
  */
 export const registerFlow = async (req, res) => {
   try {
@@ -72,7 +69,6 @@ export const registerFlow = async (req, res) => {
       (record) => record.guest_id === guest_id && record.check_out === null
     );
     if (existingRecord) {
-      // Occupancy already exists; return that record to avoid duplicate creation.
       return res.status(200).json({
         success: true,
         message: "Occupancy record already exists for this guest and room.",
@@ -84,7 +80,7 @@ export const registerFlow = async (req, res) => {
       });
     }
 
-    // 1. Assign the room using the helper function.
+    // 1. Assign the room.
     const { data: roomData, error: roomError } = await assignRoomByNumberModel(
       room_number,
       guest_id,
@@ -99,7 +95,7 @@ export const registerFlow = async (req, res) => {
     }
     const realRoomId = roomData.id;
 
-    // 2. Retrieve available RFIDs and try to find one matching rfid_id.
+    // 2. Retrieve available RFIDs and match rfid_id.
     const { data: availableRFIDs, error: rfidFetchError } = await getAvailableRFIDs();
     let rfidUid;
     if (!rfidFetchError && availableRFIDs && availableRFIDs.length > 0) {
@@ -110,8 +106,6 @@ export const registerFlow = async (req, res) => {
         }
       }
     }
-
-    // 3. If not found among available, fall back to lookup among all RFIDs.
     if (!rfidUid) {
       const { data: allRFIDs, error: allRFIDsError } = await getAllRFIDs();
       if (allRFIDsError || !allRFIDs) {
@@ -133,7 +127,7 @@ export const registerFlow = async (req, res) => {
       });
     }
 
-    // 4. Check the RFID record; if its status is 'available', assign it.
+    // 3. Check the RFID record; assign if available.
     const { data: rfidRecord, error: rfidRecordError } = await findRFIDByUID(rfidUid);
     if (rfidRecordError || !rfidRecord) {
       return res.status(500).json({
@@ -156,7 +150,7 @@ export const registerFlow = async (req, res) => {
       }
     }
 
-    // 5. Prepare occupant_snapshot data from the "guests" table (excluding password).
+    // 4. Prepare occupant_snapshot from guest data (exclude password).
     let occupantSnapshot = {};
     const { data: guestData, error: guestErr } = await findUserById(guest_id);
     if (guestErr) {
@@ -166,8 +160,7 @@ export const registerFlow = async (req, res) => {
       occupantSnapshot = safeGuestData;
     }
 
-    // 6. Create the occupancy record – this is the only place that a record is created.
-    // We set event_indicator to "registered"
+    // 5. Create the occupancy record with event_indicator set to "registered".
     const occupancyData = {
       room_id: realRoomId,
       guest_id,
@@ -195,7 +188,7 @@ export const registerFlow = async (req, res) => {
 
     return res.status(201).json({
       success: true,
-      message: "Hotel registration flow completed successfully",
+      message: "Registration flow completed successfully",
       data: {
         roomId: realRoomId,
         occupancyRecordId: occupancyRecord.id,
