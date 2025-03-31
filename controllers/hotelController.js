@@ -2,7 +2,6 @@
 import { findRoomByNumber, updateRoomByNumber } from '../models/roomsModel.js';
 import { getAvailableRFIDs, assignRFIDToGuest, findRFIDByUID, getAllRFIDs } from '../models/rfidModel.js';
 import { createHistoryRecord, getAllHistoryRecords } from '../models/roomOccupancyHistoryModel.js';
-// Import a helper to fetch guest data so we can populate occupant_snapshot
 import { findUserById } from '../models/userModel.js'; // Adjust path as needed
 
 /**
@@ -41,16 +40,16 @@ const assignRoomByNumberModel = async (room_number, guest_id, hours_stay) => {
 };
 
 /**
- * POST /api/hotel/checkin-flow
- * Performs the entire check-in flow in one call:
+ * POST /api/hotel/register-flow
+ * Performs the entire "hotel registration" flow in one call:
  *  - Checks for an existing open occupancy record to prevent duplicates.
  *  - Assigns the room.
  *  - Retrieves available RFID cards and, if necessary, falls back to all RFIDs.
  *  - If the RFID is available, it assigns the RFID to the guest.
  *  - Finally, it creates the room occupancy history record (the only place where this record is created),
- *    and sets the event_indicator to "checkin".
+ *    and sets the event_indicator to "registered".
  */
-export const checkinFlow = async (req, res) => {
+export const registerFlow = async (req, res) => {
   try {
     const { guest_id, room_number, hours_stay, rfid_id } = req.body;
     if (!guest_id || !room_number || !hours_stay || !rfid_id) {
@@ -168,7 +167,7 @@ export const checkinFlow = async (req, res) => {
     }
 
     // 6. Create the occupancy record – this is the only place that a record is created.
-    // We set event_indicator to "checkin"
+    // We set event_indicator to "registered"
     const occupancyData = {
       room_id: realRoomId,
       guest_id,
@@ -181,7 +180,7 @@ export const checkinFlow = async (req, res) => {
       was_early_checkout: false,
       occupant_snapshot: occupantSnapshot,
       mac_addresses_snapshot: {},
-      event_indicator: "checkin" // NEW: Indicator column set to "checkin"
+      event_indicator: "registered"
     };
 
     const { data: occupancyRecord, error: occupancyError } = await createHistoryRecord(occupancyData);
@@ -196,7 +195,7 @@ export const checkinFlow = async (req, res) => {
 
     return res.status(201).json({
       success: true,
-      message: "Check-in flow completed successfully",
+      message: "Hotel registration flow completed successfully",
       data: {
         roomId: realRoomId,
         occupancyRecordId: occupancyRecord.id,
@@ -204,7 +203,7 @@ export const checkinFlow = async (req, res) => {
       },
     });
   } catch (e) {
-    console.error("checkinFlow Error:", e);
+    console.error("registerFlow Error:", e);
     return res.status(500).json({
       success: false,
       message: "Internal server error",
