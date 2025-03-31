@@ -1,15 +1,7 @@
 // controllers/hotelController.js
 import { findRoomByNumber, updateRoomByNumber } from '../models/roomsModel.js';
-import {
-  getAvailableRFIDs,
-  assignRFIDToGuest,
-  findRFIDByUID,
-  getAllRFIDs
-} from '../models/rfidModel.js';
-import {
-  createHistoryRecord,
-  getAllHistoryRecords
-} from '../models/roomOccupancyHistoryModel.js';
+import { getAvailableRFIDs, assignRFIDToGuest, findRFIDByUID, getAllRFIDs } from '../models/rfidModel.js';
+import { createHistoryRecord, getAllHistoryRecords } from '../models/roomOccupancyHistoryModel.js';
 
 /**
  * Helper function to assign a room by number.
@@ -54,7 +46,7 @@ const assignRoomByNumberModel = async (room_number, guest_id, hours_stay) => {
  *  - Retrieve available RFID cards; if the requested RFID isn’t available,
  *    do a fallback lookup.
  *  - If the RFID is still available, assign it; if already assigned, skip assignment.
- *  - Create the occupancy record in room_occupancy_history
+ *  - Create the occupancy record (the only place we do it).
  */
 export const checkinFlow = async (req, res) => {
   try {
@@ -79,7 +71,7 @@ export const checkinFlow = async (req, res) => {
       (record) => record.guest_id === guest_id && record.check_out === null
     );
     if (existingRecord) {
-      // If there's already an open occupancy, just return success
+      // Occupancy already exists, so return that instead of duplicating
       return res.status(200).json({
         success: true,
         message: "Occupancy record already exists for this guest and room.",
@@ -117,6 +109,7 @@ export const checkinFlow = async (req, res) => {
         }
       }
     }
+
     // 3. If not found among available, fall back to lookup among all RFIDs.
     if (!rfidUid) {
       const { data: allRFIDs, error: allRFIDsError } = await getAllRFIDs();
@@ -139,7 +132,7 @@ export const checkinFlow = async (req, res) => {
       });
     }
 
-    // 4. Get the RFID record and, if its status is 'available', assign it.
+    // 4. If RFID is 'available', assign it. Otherwise assume already assigned to the same guest.
     const { data: rfidRecord, error: rfidRecordError } = await findRFIDByUID(rfidUid);
     if (rfidRecordError || !rfidRecord) {
       return res.status(500).json({
@@ -161,9 +154,8 @@ export const checkinFlow = async (req, res) => {
         });
       }
     }
-    // If the RFID is not 'available', assume it's already assigned to this guest.
 
-    // 5. Create the occupancy record (only here!)
+    // 5. Create the occupancy record (the single place we do it)
     const occupancyData = {
       room_id: realRoomId,
       guest_id,

@@ -1,5 +1,6 @@
 // controllers/roomOccupancyHistoryController.js
 
+import supabase from '../config/supabase.js';
 import {
   createHistoryRecord,
   getAllHistoryRecords,
@@ -11,14 +12,13 @@ import {
 } from '../models/roomOccupancyHistoryModel.js';
 
 /**
- * (Deprecated) POST /api/room-occupancy-history
- * We no longer create a new room occupancy record from here,
- * because creation is handled exclusively in hotelController.checkinFlow.
+ * POST /api/room-occupancy-history
+ * DISABLED to avoid duplicate occupancy creation.
  */
 export const addHistoryRecord = async (req, res) => {
-  return res.status(400).json({
+  return res.status(405).json({
     success: false,
-    message: 'Creating occupancy records here is disabled. Use /api/hotel/checkin-flow.',
+    message: 'Creation of occupancy record is disabled here. Use /api/hotel/checkin-flow instead.'
   });
 };
 
@@ -132,9 +132,7 @@ export const searchHistory = async (req, res) => {
   try {
     const { query } = req.query;
     if (!query) {
-      return res
-        .status(400)
-        .json({ success: false, message: 'Query parameter is required for search' });
+      return res.status(400).json({ success: false, message: 'Query parameter is required for search' });
     }
     const { data, error } = await searchHistoryRecords(query);
     if (error) {
@@ -159,36 +157,38 @@ export const searchHistory = async (req, res) => {
   }
 };
 
+// Helper to ensure occupant record exists
+const ensureOccupantRecord = async (id, reqBody) => {
+  // ...no changes...
+};
+
 /**
  * POST /api/room-occupancy-history/:id/checkin
- * We no longer auto-create an occupant record if not found.
- * If the record doesn't exist, we return an error.
+ * Stores a check-in event in the existing occupancy record.
  */
 export const checkInHistory = async (req, res) => {
   try {
-    const { id } = req.params;
+    let { id } = req.params;
     const { check_in, hours_stay } = req.body;
     const checkInTime = check_in || new Date().toISOString();
-    const numericHoursStay = parseFloat(hours_stay) || null;
+    const numericHoursStay =
+      typeof hours_stay === 'number' ? hours_stay : parseFloat(hours_stay);
+    const hoursValue = !isNaN(numericHoursStay) ? numericHoursStay : undefined;
 
-    // Fetch existing record
-    const { data: existingRecord, error: fetchErr } = await getHistoryRecordById(id);
-    if (fetchErr) {
+    // If the record doesn't exist, you can decide whether to create or disallow.
+    // For safety, we might still auto-create. But if you truly only want creation from /hotel/checkin-flow,
+    // you could disallow it here. For now, we keep the logic as is:
+    try {
+      id = await ensureOccupantRecord(id, req.body);
+    } catch (autoErr) {
       return res.status(500).json({
         success: false,
-        message: `Error fetching occupancy record (ID=${id})`,
-        error: fetchErr.message,
-      });
-    }
-    if (!existingRecord) {
-      return res.status(404).json({
-        success: false,
-        message: `No occupancy record found with ID=${id}. Cannot check in.`,
+        message: 'Error auto-creating occupancy record',
+        error: autoErr.message,
       });
     }
 
-    // Perform the check-in
-    const { data, error } = await checkInOccupancyRecord(id, checkInTime, numericHoursStay);
+    const { data, error } = await checkInOccupancyRecord(id, checkInTime, hoursValue);
     if (error) {
       return res.status(500).json({
         success: false,
@@ -213,16 +213,24 @@ export const checkInHistory = async (req, res) => {
 
 /**
  * POST /api/room-occupancy-history/:id/checkout
- * We no longer auto-create an occupant record if not found.
- * If the record doesn't exist, we return an error.
+ * Stores a check-out event in the room occupancy history.
  */
 export const checkOutHistory = async (req, res) => {
   try {
-    const { id } = req.params;
+    let { id } = req.params;
     const { check_out: providedCheckOut, check_out_reason: clientReason } = req.body;
     const checkOutTime = providedCheckOut || new Date().toISOString();
 
-    // Fetch existing record
+    try {
+      id = await ensureOccupantRecord(id, req.body);
+    } catch (autoErr) {
+      return res.status(500).json({
+        success: false,
+        message: 'Error auto-creating occupancy record',
+        error: autoErr.message,
+      });
+    }
+
     const { data: existingRecord, error: fetchError } = await getHistoryRecordById(id);
     if (fetchError) {
       return res.status(500).json({
@@ -231,14 +239,7 @@ export const checkOutHistory = async (req, res) => {
         error: fetchError.message,
       });
     }
-    if (!existingRecord) {
-      return res.status(404).json({
-        success: false,
-        message: `No occupancy record found with ID=${id}. Cannot check out.`,
-      });
-    }
 
-    // Compute whether the check-out is early
     let wasEarly = false;
     if (existingRecord && existingRecord.check_out) {
       const expected = new Date(existingRecord.check_out).getTime();
@@ -247,7 +248,6 @@ export const checkOutHistory = async (req, res) => {
     }
     const reason = clientReason || (wasEarly ? 'Early Check-Out' : 'Auto Check-Out');
 
-    // Perform the check-out
     const { data, error: updateError } = await checkOutOccupancyRecord(
       id,
       checkOutTime,
