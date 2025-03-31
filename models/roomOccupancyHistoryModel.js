@@ -91,8 +91,14 @@ export const searchHistoryRecords = async (query) => {
   }
 };
 
+/**
+ * Instead of updating an existing occupancy record for check-in,
+ * this function now creates a new row with event_indicator set to "checkin".
+ * This preserves the original "registered" event.
+ */
 export const checkInOccupancyRecord = async (id, checkInTime, hoursStay) => {
   try {
+    // First, fetch the existing record to copy relevant details.
     const { data: existing, error: fetchErr } = await getHistoryRecordById(id);
     if (fetchErr) {
       return { data: null, error: fetchErr };
@@ -100,25 +106,33 @@ export const checkInOccupancyRecord = async (id, checkInTime, hoursStay) => {
     if (!existing) {
       return { data: null, error: new Error(`Record not found for ID=${id}`) };
     }
-    if (existing.check_in) {
-      console.warn(`[checkInOccupancyRecord] Overriding existing check_in for ID=${id}`);
-    }
-    // Update check_in time and change event_indicator to "checkin"
-    const updateData = {
+
+    // Prepare a new row copying most fields from the existing record,
+    // but setting check_in to the provided time and event_indicator to "checkin".
+    const newRow = {
+      room_id: existing.room_id,
+      guest_id: existing.guest_id,
+      rfid_id: existing.rfid_id,
+      registration_time: existing.registration_time, // Retain original registration time
       check_in: checkInTime,
+      check_out: null,
+      // Use provided hoursStay if valid; otherwise fall back to existing value.
+      hours_stay: (typeof hoursStay === 'number' && hoursStay > 0) ? hoursStay : existing.hours_stay,
+      occupant_snapshot: existing.occupant_snapshot,
+      mac_addresses_snapshot: existing.mac_addresses_snapshot,
+      check_out_reason: null,
+      was_early_checkout: false,
       event_indicator: "checkin"
     };
-    if (typeof hoursStay === 'number' && hoursStay > 0) {
-      updateData.hours_stay = hoursStay;
-    }
+
     const { data, error } = await supabase
       .from('room_occupancy_history')
-      .update(updateData)
-      .eq('id', id)
+      .insert([newRow])
       .select('*')
       .single();
+
     if (error) {
-      console.error('[RoomOccupancyHistoryModel] Error in checkInOccupancyRecord:', error);
+      console.error('[RoomOccupancyHistoryModel] Error inserting new check-in record:', error);
       return { data: null, error };
     }
     return { data, error: null };
