@@ -64,7 +64,6 @@ async function sendTenMinWarning(room) {
 }
 
 // 4) Helper: find the open occupant record in room_occupancy_history
-//    (where check_out is null for that guest+room).
 async function findOpenOccupancyRecord(guestId, roomId) {
   try {
     const { data, error } = await supabase
@@ -111,8 +110,9 @@ async function checkOutOccupancyHistory(occupancyId, reason = "Auto Check-Out") 
   }
 }
 
-// -------------- Cron Job: Auto-Checkout (Runs every minute) --------------
-cron.schedule('*/1 * * * *', async () => {
+// -------------- Cron Job: Auto-Checkout (Runs every 30 seconds) --------------
+// Cron pattern '*/30 * * * * *' means every 30 seconds.
+cron.schedule('*/30 * * * * *', async () => {
   console.log('[cronJobs] Running auto-checkout job...');
 
   try {
@@ -149,7 +149,6 @@ cron.schedule('*/1 * * * *', async () => {
           console.log(`[cronJobs] Auto-checked out Room #${room.room_number}`);
 
           // Step B: Find the open occupant record in room_occupancy_history
-          // by guest_id + room_id + check_out IS NULL
           const occupantRecord = await findOpenOccupancyRecord(room.guest_id, room.id);
           if (occupantRecord) {
             // Step C: Check out that occupant record (creates occupant check-out event)
