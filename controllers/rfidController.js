@@ -15,6 +15,7 @@ import { findRoomByGuestAndNumber } from '../models/roomsModel.js';
 import fetch from 'node-fetch';  // For calling Pi-based endpoints
 
 const BACKEND_BASE_URL = process.env.BACKEND_BASE_URL || "https://smartaccesscontrol-backend-production.up.railway.app/api";
+const PI_GATEWAY_BASE_URL = process.env.PI_GATEWAY_BASE_URL || BACKEND_BASE_URL;
 
 // -----------------------------------------------------------------------------
 //  1) GET /api/rfid/all
@@ -574,7 +575,7 @@ export const verifyRFID = async (req, res) => {
       console.error('[verifyRFID] Occupant creation error:', err);
     }
 
-    // If occupantRecordId is undefined, set to null to avoid "undefined" in JSON
+    // If occupantRecordId is undefined, set to null
     if (occupantRecordId === undefined) {
       occupantRecordId = null;
     }
@@ -635,7 +636,7 @@ export const getValidRFIDCards = async (req, res) => {
 };
 
 // -----------------------------------------------------------------------------
-// 10) POST /api/rfid/post-verify-actions
+//  10) POST /api/rfid/post-verify-actions
 // -----------------------------------------------------------------------------
 export const postVerifyActions = async (req, res) => {
   try {
@@ -691,12 +692,9 @@ export const postVerifyActions = async (req, res) => {
     const occupantCheckIn = async () => {
       if (!occupantId || !occupant) return 'No occupant record found.';
       if (occupant.check_in) return 'Occupant already checked in.';
-      const url = `${process.env.BASE_URL}/room-occupancy-history/${occupantId}/checkin`;
-      const finalUrl = url.includes('undefined')
-        ? `${BACKEND_BASE_URL}/room-occupancy-history/${occupantId}/checkin`
-        : url;
+      const url = `${PI_GATEWAY_BASE_URL}/room-occupancy-history/${occupantId}/checkin`;
       try {
-        const resp = await fetch(finalUrl, {
+        const resp = await fetch(url, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ check_in: new Date().toISOString() }),
@@ -714,7 +712,7 @@ export const postVerifyActions = async (req, res) => {
 
     // 4) Store leases via Pi-based endpoint
     const storeLeases = async () => {
-      const piGatewayUrl = process.env.PI_GATEWAY_BASE_URL || 'http://127.0.0.1:3000/api';
+      const piGatewayUrl = PI_GATEWAY_BASE_URL;
       try {
         const resp = await fetch(`${piGatewayUrl}/store-leases`, {
           method: 'POST',
@@ -751,7 +749,7 @@ export const postVerifyActions = async (req, res) => {
         const out = new Date(checkInTime.getTime() + hoursStay * 3600000);
         checkOutIso = out.toISOString();
       }
-      const piGatewayUrl = process.env.PI_GATEWAY_BASE_URL || 'http://127.0.0.1:3000/api';
+      const piGatewayUrl = PI_GATEWAY_BASE_URL;
       try {
         const resp = await fetch(`${piGatewayUrl}/activate-internet`, {
           method: 'POST',

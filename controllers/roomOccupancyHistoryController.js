@@ -156,31 +156,25 @@ export const searchHistory = async (req, res) => {
   }
 };
 
-// Helper: ensureOccupantRecord or disallow creation outside hotelController
-const ensureOccupantRecord = async (id, reqBody) => {
-  // if you want to do something, you can. Otherwise leave blank
-};
-
 /**
  * POST /api/room-occupancy-history/:id/checkin
+ * Now includes validation of the occupancy record ID.
  */
 export const checkInHistory = async (req, res) => {
   try {
     let { id } = req.params;
+    if (!id || isNaN(Number(id))) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid occupancy record ID provided.',
+      });
+    }
     const { check_in, hours_stay } = req.body;
     const checkInTime = check_in || new Date().toISOString();
     const numericHoursStay = typeof hours_stay === 'number' ? hours_stay : parseFloat(hours_stay);
     const hoursValue = !isNaN(numericHoursStay) ? numericHoursStay : undefined;
 
-    try {
-      id = await ensureOccupantRecord(id, req.body);
-    } catch (autoErr) {
-      return res.status(500).json({
-        success: false,
-        message: 'Error auto-creating occupancy record',
-        error: autoErr.message,
-      });
-    }
+    // (Optional) Call to ensureOccupantRecord can be added here if needed
 
     const { data, error } = await checkInOccupancyRecord(id, checkInTime, hoursValue);
     if (error) {
@@ -214,15 +208,7 @@ export const checkOutHistory = async (req, res) => {
     const { check_out: providedCheckOut, check_out_reason: clientReason } = req.body;
     const checkOutTime = providedCheckOut || new Date().toISOString();
 
-    try {
-      id = await ensureOccupantRecord(id, req.body);
-    } catch (autoErr) {
-      return res.status(500).json({
-        success: false,
-        message: 'Error auto-creating occupancy record',
-        error: autoErr.message,
-      });
-    }
+    // (Optional) Call to ensureOccupantRecord can be added here if needed
 
     const { data: existingRecord, error: fetchError } = await getHistoryRecordById(id);
     if (fetchError) {
