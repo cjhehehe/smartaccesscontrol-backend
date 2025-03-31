@@ -606,30 +606,57 @@ export const verifyRFID = async (req, res) => {
 
 // -----------------------------------------------------------------------------
 //  9) GET /api/rfid/valid-cards
+//  Now we do a small two-step process to also fetch the 'room_number'
+//  for each assigned/active RFID. This way, the Pi's local cache can
+//  store the correct 'room_number' for fast unlock checks.
 // -----------------------------------------------------------------------------
 export const getValidRFIDCards = async (req, res) => {
   try {
-    // Fetch RFID tags that are 'assigned' or 'active'
-    // Without the 'room_number' column (since it doesn't exist)
-    const { data, error } = await supabase
+    // 1) Fetch RFID tags that are 'assigned' or 'active'
+    const { data: rfidRows, error: rfidError } = await supabase
       .from('rfid_tags')
-      .select('rfid_uid, guest_id, status, created_at')
+      .select('id, rfid_uid, guest_id, status, created_at')
       .in('status', ['assigned', 'active']);
-    if (error) {
-      console.error('[getValidRFIDCards] Error fetching valid RFID tags:', error);
+    if (rfidError) {
+      console.error('[getValidRFIDCards] Error fetching valid RFID tags:', rfidError);
       return res.status(500).json({
         success: false,
         message: 'Database error: Unable to fetch valid RFID tags.',
       });
     }
-    // Build a dictionary mapping rfid_uid -> RFID record
+
     const result = {};
-    data.forEach(row => {
-      result[row.rfid_uid] = row;
-    });
+
+    // 2) For each RFID row, find a "reserved" or "occupied" room for that guest
+    //    to determine the correct 'room_number'.
+    for (const row of rfidRows) {
+      let room_number = null;
+      if (row.guest_id) {
+        // Fetch occupant rooms
+        const { data: occupantRooms, error: occupantErr } = await supabase
+          .from('rooms')
+          .select('room_number, status')
+          .eq('guest_id', row.guest_id)
+          .in('status', ['reserved', 'occupied']);
+
+        if (!occupantErr && occupantRooms && occupantRooms.length > 0) {
+          // pick occupantRooms[0] for simplicity
+          room_number = occupantRooms[0].room_number;
+        }
+      }
+
+      result[row.rfid_uid] = {
+        rfid_uid: row.rfid_uid,
+        guest_id: row.guest_id,
+        status: row.status,
+        created_at: row.created_at,
+        room_number,
+      };
+    }
+
     return res.status(200).json({
       success: true,
-      message: 'Valid RFID mappings fetched successfully.',
+      message: 'Valid RFID mappings fetched successfully (including room_number).',
       data: result,
     });
   } catch (err) {
@@ -642,7 +669,7 @@ export const getValidRFIDCards = async (req, res) => {
 };
 
 // -----------------------------------------------------------------------------
-//  10) POST /api/rfid/post-verify-actions
+// 10) POST /api/rfid/post-verify-actions
 // -----------------------------------------------------------------------------
 export const postVerifyActions = async (req, res) => {
   try {
