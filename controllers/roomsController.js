@@ -86,11 +86,6 @@ export const addRoom = async (req, res) => {
 /**
  * PUT /api/rooms/assign
  * Assign (reserve) a room by room_number.
- * 
- * New logic:
- *  1. Find the room by room_number.
- *  2. If found, check that the room’s status is "available".
- *  3. If available, update the room with guest_id, hours_stay, registration_time, and set status to "reserved".
  */
 export const assignRoomByNumber = async (req, res) => {
   try {
@@ -142,7 +137,7 @@ export const assignRoomByNumber = async (req, res) => {
       registration_time: new Date().toISOString(),
     };
 
-    // Update the room record without additional filtering (we already checked availability)
+    // Update the room record
     const { data, error } = await updateRoomByNumber(room_number, updateFields, {
       onlyIfAvailable: false,
     });
@@ -309,7 +304,7 @@ export const roomCheckIn = async (req, res) => {
  * POST /api/rooms/:id/checkout
  * Early check-out (manual check-out):
  *   - Clears occupant fields (setting the room to 'available').
- *   - Calls the Pi-based /api/deactivate-internet endpoint to remove the occupant from the Wi-Fi whitelist.
+ *   - Calls the Pi-based /api/deactivate-internet endpoint.
  */
 export const roomCheckOut = async (req, res) => {
   try {
@@ -333,7 +328,7 @@ export const roomCheckOut = async (req, res) => {
     const updatedRoom = result.data;
     const occupantId = result.occupantId; // Returned from the model
 
-    // If occupantId is present, call the Pi-based /api/deactivate-internet endpoint
+    // If occupantId is present, call the Pi-based /api/deactivate-internet
     if (occupantId) {
       try {
         const mikrotikApiUrl =

@@ -110,12 +110,11 @@ export const getAllRooms = async () => {
  */
 export const updateRoom = async (roomId, updateFields) => {
   try {
-    // Important: use .select('*') so we get back the updated row
     const { data, error } = await supabase
       .from('rooms')
       .update(updateFields)
       .eq('id', roomId)
-      .select('*') // <-- this ensures we get updatedRoom in 'data'
+      .select('*')
       .single();
     if (error) {
       console.error('[RoomsModel] Error updating room:', error);
@@ -130,7 +129,6 @@ export const updateRoom = async (roomId, updateFields) => {
 
 /**
  * Update a room by room_number.
- * Optionally only update if room status is 'available'.
  */
 export const updateRoomByNumber = async (
   roomNumber,
@@ -147,7 +145,6 @@ export const updateRoomByNumber = async (
       query = query.eq('status', 'available');
     }
 
-    // Must use .select('*') to get the updated row
     const { data, error } = await query.select('*').single();
     if (error) {
       console.error('[RoomsModel] Error updating room by number:', error);
@@ -169,7 +166,7 @@ export const deleteRoom = async (roomId) => {
       .from('rooms')
       .delete()
       .eq('id', roomId)
-      .select('*') // If you want the deleted row, also do .select('*')
+      .select('*')
       .single();
     if (error) {
       console.error('[RoomsModel] Error deleting room:', error);
@@ -184,7 +181,6 @@ export const deleteRoom = async (roomId) => {
 
 /**
  * Check-In a guest into a room by ID.
- * Sets check_in time and status = 'occupied' (using UTC timestamp).
  */
 export const checkInRoom = async (roomId, checkInTime = new Date().toISOString()) => {
   try {
@@ -195,7 +191,7 @@ export const checkInRoom = async (roomId, checkInTime = new Date().toISOString()
         status: 'occupied',
       })
       .eq('id', roomId)
-      .select('*') // get updated row
+      .select('*')
       .single();
     if (error) {
       console.error('[RoomsModel] Error during check-in:', error);
@@ -209,8 +205,7 @@ export const checkInRoom = async (roomId, checkInTime = new Date().toISOString()
 };
 
 /**
- * Check-Out a guest from a room by ID (low-level).
- * Resets occupant fields, sets status = 'available', and resets ten_min_warning_sent.
+ * Check-Out a guest from a room by ID.
  */
 export const checkOutRoom = async (roomId) => {
   try {
@@ -226,7 +221,7 @@ export const checkOutRoom = async (roomId) => {
         ten_min_warning_sent: false,
       })
       .eq('id', roomId)
-      .select('*') // must select to get the updated row
+      .select('*')
       .single();
 
     if (error) {
@@ -294,7 +289,6 @@ export const checkOutRoomById = async (roomId, reason = 'Automatic Checkout') =>
       return { success: false, error: updateError };
     }
     if (!updatedRoom) {
-      // If supabase returned null for updatedRoom
       return { success: false, error: new Error('Room not found or could not be checked out') };
     }
 

@@ -14,7 +14,6 @@ import supabase from '../config/supabase.js';
 import { findRoomByGuestAndNumber } from '../models/roomsModel.js';
 import fetch from 'node-fetch';  // For calling Pi-based endpoints
 
-// Define a consistent backend base URL
 const BACKEND_BASE_URL = process.env.BACKEND_BASE_URL || "https://smartaccesscontrol-backend-production.up.railway.app/api";
 
 // -----------------------------------------------------------------------------
@@ -312,7 +311,7 @@ export const updateRFIDStatus = async (req, res) => {
       });
     }
 
-    // 3) Update status based on newStatus
+    // 3) Update status
     let updatedData = null;
     if (newStatus === 'available') {
       const { data, error } = await unassignRFID(rfid_uid);
@@ -365,7 +364,6 @@ export const updateRFIDStatus = async (req, res) => {
 
 // -----------------------------------------------------------------------------
 //  8) POST /api/rfid/verify
-//    - Door-access verification logic
 // -----------------------------------------------------------------------------
 export const verifyRFID = async (req, res) => {
   try {
@@ -576,6 +574,11 @@ export const verifyRFID = async (req, res) => {
       console.error('[verifyRFID] Occupant creation error:', err);
     }
 
+    // If occupantRecordId is undefined, set to null to avoid "undefined" in JSON
+    if (occupantRecordId === undefined) {
+      occupantRecordId = null;
+    }
+
     return res.status(200).json({
       success: true,
       message: 'RFID verified successfully.',
@@ -583,7 +586,7 @@ export const verifyRFID = async (req, res) => {
         rfid: rfidData,
         guest: guestData,
         room: roomData,
-        occupancyHistoryId: occupantRecordId || null,
+        occupancyHistoryId: occupantRecordId,
       },
     });
   } catch (error) {
@@ -597,7 +600,6 @@ export const verifyRFID = async (req, res) => {
 
 // -----------------------------------------------------------------------------
 //  9) GET /api/rfid/valid-cards
-//     Return a dictionary of RFID -> minimal data for local caching
 // -----------------------------------------------------------------------------
 export const getValidRFIDCards = async (req, res) => {
   try {
@@ -634,7 +636,6 @@ export const getValidRFIDCards = async (req, res) => {
 
 // -----------------------------------------------------------------------------
 // 10) POST /api/rfid/post-verify-actions
-//     Consolidated endpoint to process occupancy check-in, store leases, activate internet, and log access.
 // -----------------------------------------------------------------------------
 export const postVerifyActions = async (req, res) => {
   try {
@@ -737,7 +738,7 @@ export const postVerifyActions = async (req, res) => {
       }
     };
 
-    // 5) Activate internet via Pi-based endpoint (if occupant data is available)
+    // 5) Activate internet via Pi-based endpoint
     const activateInternet = async () => {
       if (!occupant || !occupant.check_in || !occupant.hours_stay) {
         return 'No check_in or hours_stay; skipping internet activation.';
