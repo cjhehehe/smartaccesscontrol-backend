@@ -3,6 +3,9 @@ import { findRoomByNumber, updateRoomByNumber } from '../models/roomsModel.js';
 import { getAvailableRFIDs, assignRFIDToGuest, findRFIDByUID, getAllRFIDs } from '../models/rfidModel.js';
 import { createHistoryRecord, getAllHistoryRecords } from '../models/roomOccupancyHistoryModel.js';
 
+// Import a helper to fetch guest data, so we can populate occupant_snapshot
+import { findUserById } from '../models/userModel.js';  // or wherever your "guests" queries live
+
 /**
  * Helper function to assign a room by number.
  * It validates the hours of stay, ensures the room exists and is available,
@@ -154,7 +157,19 @@ export const checkinFlow = async (req, res) => {
       }
     }
 
-    // 5. Create the occupancy record – this is the only place that a record is created.
+    // 5. Prepare occupant_snapshot data from the "guests" table (excluding password).
+    let occupantSnapshot = {};
+    const { data: guestData, error: guestErr } = await findUserById(guest_id);
+    if (guestErr) {
+      // If we can't fetch guest data, just log the error but still proceed with an empty occupantSnapshot.
+      console.error("Failed to fetch guest data for occupant_snapshot:", guestErr);
+    } else if (guestData) {
+      // Remove sensitive fields like password
+      const { password, ...safeGuestData } = guestData;
+      occupantSnapshot = safeGuestData; // e.g. { id, name, email, phone, membership_level, etc. }
+    }
+
+    // 6. Create the occupancy record – this is the only place that a record is created.
     const occupancyData = {
       room_id: realRoomId,
       guest_id,
@@ -165,11 +180,13 @@ export const checkinFlow = async (req, res) => {
       hours_stay,
       check_out_reason: null,
       was_early_checkout: false,
-      occupant_snapshot: {},
+      occupant_snapshot: occupantSnapshot,   // <--- now storing actual occupant data
       mac_addresses_snapshot: {},
     };
+
     const { data: occupancyRecord, error: occupancyError } = await createHistoryRecord(occupancyData);
     if (occupancyError || !occupancyRecord) {
+      console.error("Supabase insert error:", occupancyError); // For debugging
       return res.status(500).json({
         success: false,
         message: "Failed to create occupancy record",

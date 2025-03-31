@@ -157,16 +157,15 @@ export const searchHistory = async (req, res) => {
   }
 };
 
-// The check-in and check-out endpoints below remain available for updating existing records.
-
+// The check-in and check-out endpoints remain for updating existing records.
 const ensureOccupantRecord = async (id, reqBody) => {
-  // Logic for auto-creating an occupant record if needed.
-  // This can be kept as-is or updated based on your business logic.
+  // If you truly want to prevent creation outside hotelController,
+  // you could leave this blank or return an error if record doesn't exist.
 };
 
 /**
  * POST /api/room-occupancy-history/:id/checkin
- * Stores a check-in event in the existing occupancy record.
+ * For updating an existing occupancy record with a check_in time.
  */
 export const checkInHistory = async (req, res) => {
   try {
@@ -176,7 +175,6 @@ export const checkInHistory = async (req, res) => {
     const numericHoursStay = typeof hours_stay === 'number' ? hours_stay : parseFloat(hours_stay);
     const hoursValue = !isNaN(numericHoursStay) ? numericHoursStay : undefined;
 
-    // Auto-create the occupant record if it doesn't exist.
     try {
       id = await ensureOccupantRecord(id, req.body);
     } catch (autoErr) {
@@ -212,7 +210,7 @@ export const checkInHistory = async (req, res) => {
 
 /**
  * POST /api/room-occupancy-history/:id/checkout
- * Stores a check-out event in the room occupancy history.
+ * For updating an existing occupancy record with a check_out time.
  */
 export const checkOutHistory = async (req, res) => {
   try {
