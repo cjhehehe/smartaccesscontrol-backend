@@ -41,12 +41,11 @@ const assignRoomByNumberModel = async (room_number, guest_id, hours_stay) => {
 /**
  * POST /api/hotel/checkin-flow
  * Performs the entire check-in flow in one call:
- *  - Check for an existing occupancy record (prevent duplicates)
- *  - Assign the room
- *  - Retrieve available RFID cards; if the requested RFID isn’t available,
- *    do a fallback lookup.
- *  - If the RFID is still available, assign it; if already assigned, skip assignment.
- *  - Create the occupancy record (the only place we do it).
+ *  - Checks for an existing open occupancy record to prevent duplicates.
+ *  - Assigns the room.
+ *  - Retrieves available RFID cards and, if necessary, falls back to all RFIDs.
+ *  - If the RFID is available, it assigns the RFID to the guest.
+ *  - Finally, it creates the room occupancy history record (the only place where this record is created).
  */
 export const checkinFlow = async (req, res) => {
   try {
@@ -58,7 +57,7 @@ export const checkinFlow = async (req, res) => {
       });
     }
 
-    // 0. Check if an open occupancy record already exists for this guest
+    // 0. Check if an open occupancy record already exists for this guest.
     const { data: existingRecords, error: recordsError } = await getAllHistoryRecords();
     if (recordsError) {
       return res.status(500).json({
@@ -71,7 +70,7 @@ export const checkinFlow = async (req, res) => {
       (record) => record.guest_id === guest_id && record.check_out === null
     );
     if (existingRecord) {
-      // Occupancy already exists, so return that instead of duplicating
+      // Occupancy already exists; return that record to avoid duplicate creation.
       return res.status(200).json({
         success: true,
         message: "Occupancy record already exists for this guest and room.",
@@ -83,7 +82,7 @@ export const checkinFlow = async (req, res) => {
       });
     }
 
-    // 1. Assign the room using the helper function
+    // 1. Assign the room using the helper function.
     const { data: roomData, error: roomError } = await assignRoomByNumberModel(
       room_number,
       guest_id,
@@ -98,7 +97,7 @@ export const checkinFlow = async (req, res) => {
     }
     const realRoomId = roomData.id;
 
-    // 2. Retrieve available RFIDs and try to pick one matching rfid_id.
+    // 2. Retrieve available RFIDs and try to find one matching rfid_id.
     const { data: availableRFIDs, error: rfidFetchError } = await getAvailableRFIDs();
     let rfidUid;
     if (!rfidFetchError && availableRFIDs && availableRFIDs.length > 0) {
@@ -132,7 +131,7 @@ export const checkinFlow = async (req, res) => {
       });
     }
 
-    // 4. If RFID is 'available', assign it. Otherwise assume already assigned to the same guest.
+    // 4. Check the RFID record; if its status is 'available', assign it.
     const { data: rfidRecord, error: rfidRecordError } = await findRFIDByUID(rfidUid);
     if (rfidRecordError || !rfidRecord) {
       return res.status(500).json({
@@ -155,7 +154,7 @@ export const checkinFlow = async (req, res) => {
       }
     }
 
-    // 5. Create the occupancy record (the single place we do it)
+    // 5. Create the occupancy record – this is the only place that a record is created.
     const occupancyData = {
       room_id: realRoomId,
       guest_id,

@@ -13,7 +13,7 @@ import {
 
 /**
  * POST /api/room-occupancy-history
- * DISABLED to avoid duplicate occupancy creation.
+ * DISABLED to avoid duplicate occupancy record creation.
  */
 export const addHistoryRecord = async (req, res) => {
   return res.status(405).json({
@@ -157,9 +157,11 @@ export const searchHistory = async (req, res) => {
   }
 };
 
-// Helper to ensure occupant record exists
+// The check-in and check-out endpoints below remain available for updating existing records.
+
 const ensureOccupantRecord = async (id, reqBody) => {
-  // ...no changes...
+  // Logic for auto-creating an occupant record if needed.
+  // This can be kept as-is or updated based on your business logic.
 };
 
 /**
@@ -171,13 +173,10 @@ export const checkInHistory = async (req, res) => {
     let { id } = req.params;
     const { check_in, hours_stay } = req.body;
     const checkInTime = check_in || new Date().toISOString();
-    const numericHoursStay =
-      typeof hours_stay === 'number' ? hours_stay : parseFloat(hours_stay);
+    const numericHoursStay = typeof hours_stay === 'number' ? hours_stay : parseFloat(hours_stay);
     const hoursValue = !isNaN(numericHoursStay) ? numericHoursStay : undefined;
 
-    // If the record doesn't exist, you can decide whether to create or disallow.
-    // For safety, we might still auto-create. But if you truly only want creation from /hotel/checkin-flow,
-    // you could disallow it here. For now, we keep the logic as is:
+    // Auto-create the occupant record if it doesn't exist.
     try {
       id = await ensureOccupantRecord(id, req.body);
     } catch (autoErr) {
