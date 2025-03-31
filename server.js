@@ -19,12 +19,11 @@ import feedbackRoutes from './routes/feedbackRoutes.js';
 import notificationRoutes from './routes/notificationRoutes.js';
 import macAddressRoutes from './routes/macAddressRoutes.js';
 import mikrotikRoutes from './routes/mikrotikRoutes.js';
-
-// NEW: Import the reset routes
 import resetRoutes from './routes/resetRoutes.js';
-
-// NEW: Import the room occupancy history routes
 import roomOccupancyHistoryRoutes from './routes/roomOccupancyHistoryRoutes.js';
+
+// NEW: Import hotel routes
+import hotelRoutes from './routes/hotelRoutes.js';
 
 // NEW: Import the cron job
 import './cronJobs.js';
@@ -57,6 +56,9 @@ app.use('/api/mac-address', macAddressRoutes);
 app.use('/api/mikrotik', mikrotikRoutes);
 app.use('/api/setup', resetRoutes);
 app.use('/api/room-occupancy-history', roomOccupancyHistoryRoutes);
+
+// NEW: Mount the hotel unified endpoint
+app.use('/api/hotel', hotelRoutes);
 
 // Root and Catch-All Routes
 app.get('/', (req, res) => {
