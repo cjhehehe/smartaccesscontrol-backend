@@ -324,7 +324,7 @@ export const updateRFIDStatus = async (req, res) => {
         .update({ status: 'assigned' })
         .eq('rfid_uid', rfid_uid)
         .neq('status', 'assigned')
-        .select('id, rfid_uid, guest_id, status, room_number')
+        .select('id, rfid_uid, guest_id, status, created_at')
         .maybeSingle();
       if (error) {
         console.error('[updateRFIDStatus] Error setting RFID assigned:', error);
@@ -525,7 +525,6 @@ export const verifyRFID = async (req, res) => {
     if (rfidData.status === 'assigned') {
       const { data: updatedRFID, error: activationError } = await activateRFID(rfid_uid);
       if (activationError) {
-        // Log the error, but if it contains "PGRST116", ignore it.
         const errMsg = activationError.message || "";
         if (errMsg.includes("PGRST116")) {
           console.warn(`[verifyRFID] activateRFID returned PGRST116 for RFID ${rfid_uid}; ignoring error.`);
@@ -611,9 +610,10 @@ export const verifyRFID = async (req, res) => {
 export const getValidRFIDCards = async (req, res) => {
   try {
     // Fetch RFID tags that are 'assigned' or 'active'
+    // Without the 'room_number' column (since it doesn't exist)
     const { data, error } = await supabase
       .from('rfid_tags')
-      .select('rfid_uid, guest_id, status, room_number')
+      .select('rfid_uid, guest_id, status, created_at')
       .in('status', ['assigned', 'active']);
     if (error) {
       console.error('[getValidRFIDCards] Error fetching valid RFID tags:', error);

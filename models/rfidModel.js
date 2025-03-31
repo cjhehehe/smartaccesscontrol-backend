@@ -3,13 +3,13 @@ import supabase from '../config/supabase.js';
 
 /**
  * Find an RFID by its UID.
- * Now also selects the room_number field.
+ * Only selects columns that actually exist in rfid_tags: id, rfid_uid, guest_id, status, created_at.
  */
 export const findRFIDByUID = async (rfid_uid) => {
   try {
     const { data, error } = await supabase
       .from('rfid_tags')
-      .select('id, rfid_uid, guest_id, status, room_number')
+      .select('id, rfid_uid, guest_id, status, created_at')
       .eq('rfid_uid', rfid_uid)
       .maybeSingle();
 
@@ -25,14 +25,13 @@ export const findRFIDByUID = async (rfid_uid) => {
 };
 
 /**
- * Get all RFID tags.
- * Now also selects the room_number field.
+ * Get all RFID tags (id, rfid_uid, guest_id, status, created_at).
  */
 export const getAllRFIDs = async () => {
   try {
     const { data, error } = await supabase
       .from('rfid_tags')
-      .select('*'); // assuming '*' returns room_number as well
+      .select('id, rfid_uid, guest_id, status, created_at');
     if (error) {
       console.error('[getAllRFIDs] Error fetching RFID tags:', error);
       return { data: null, error };
@@ -46,13 +45,12 @@ export const getAllRFIDs = async () => {
 
 /**
  * Get all available RFID tags (status = 'available').
- * Now also selects the room_number field.
  */
 export const getAvailableRFIDs = async () => {
   try {
     const { data, error } = await supabase
       .from('rfid_tags')
-      .select('id, rfid_uid, status, room_number')
+      .select('id, rfid_uid, guest_id, status, created_at')
       .eq('status', 'available');
     if (error) {
       console.error('[getAvailableRFIDs] Error fetching available RFID tags:', error);
@@ -78,8 +76,8 @@ export const assignRFIDToGuest = async (rfid_uid, guest_id) => {
       })
       .eq('rfid_uid', rfid_uid)
       .eq('status', 'available')
-      .select('id, rfid_uid, guest_id, status, room_number')
-      .maybeSingle();  // use maybeSingle() to avoid "multiple rows" errors
+      .select('id, rfid_uid, guest_id, status, created_at')
+      .maybeSingle();
     if (error) {
       console.error('[assignRFIDToGuest] Error assigning RFID:', error);
       return { data: null, error };
@@ -93,7 +91,6 @@ export const assignRFIDToGuest = async (rfid_uid, guest_id) => {
 
 /**
  * Activate an RFID (set status -> 'active').
- * Using maybeSingle() to gracefully handle cases where no row or multiple rows are returned.
  */
 export const activateRFID = async (rfid_uid) => {
   try {
@@ -102,7 +99,7 @@ export const activateRFID = async (rfid_uid) => {
       .update({ status: 'active' })
       .eq('rfid_uid', rfid_uid)
       .eq('status', 'assigned')
-      .select('id, rfid_uid, guest_id, status, room_number')
+      .select('id, rfid_uid, guest_id, status, created_at')
       .maybeSingle();
     if (error) {
       console.error('[activateRFID] Error activating RFID:', error);
@@ -125,7 +122,7 @@ export const markRFIDLost = async (rfid_uid) => {
       .update({ status: 'lost' })
       .eq('rfid_uid', rfid_uid)
       .neq('status', 'lost')
-      .select('id, rfid_uid, guest_id, status, room_number')
+      .select('id, rfid_uid, guest_id, status, created_at')
       .maybeSingle();
     if (error) {
       console.error('[markRFIDLost] Error marking RFID lost:', error);
@@ -150,7 +147,7 @@ export const unassignRFID = async (rfid_uid) => {
         status: 'available',
       })
       .eq('rfid_uid', rfid_uid)
-      .select('id, rfid_uid, guest_id, status, room_number')
+      .select('id, rfid_uid, guest_id, status, created_at')
       .maybeSingle();
     if (error) {
       console.error('[unassignRFID] Error unassigning RFID:', error);
@@ -175,7 +172,7 @@ export const resetRFIDByGuest = async (guest_id) => {
         status: 'available',
       })
       .match({ guest_id })
-      .select('id, rfid_uid, guest_id, status, room_number');
+      .select('id, rfid_uid, guest_id, status, created_at');
     if (error) {
       console.error('[resetRFIDByGuest] Error resetting RFID:', error);
       return { data: null, error };
