@@ -3,7 +3,9 @@ import supabase from '../config/supabase.js';
 
 export const createHistoryRecord = async (recordData) => {
   try {
-    // Adding .select('*') to have Supabase return the inserted row
+    // Ensure recordData has "event_indicator" if you want to set a default
+    // e.g. recordData.event_indicator = recordData.event_indicator || 'hotel-checkin';
+
     const { data, error } = await supabase
       .from('room_occupancy_history')
       .insert([recordData])

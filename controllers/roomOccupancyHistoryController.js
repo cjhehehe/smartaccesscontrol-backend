@@ -1,5 +1,4 @@
 // controllers/roomOccupancyHistoryController.js
-
 import supabase from '../config/supabase.js';
 import {
   createHistoryRecord,
@@ -157,15 +156,13 @@ export const searchHistory = async (req, res) => {
   }
 };
 
-// The check-in and check-out endpoints below remain for updating existing records.
+// Helper: ensureOccupantRecord or disallow creation outside hotelController
 const ensureOccupantRecord = async (id, reqBody) => {
-  // If you truly want to prevent creation outside hotelController,
-  // you could leave this blank or return an error if record doesn't exist.
+  // if you want to do something, you can. Otherwise leave blank
 };
 
 /**
  * POST /api/room-occupancy-history/:id/checkin
- * For updating an existing occupancy record with a check_in time.
  */
 export const checkInHistory = async (req, res) => {
   try {
@@ -210,7 +207,6 @@ export const checkInHistory = async (req, res) => {
 
 /**
  * POST /api/room-occupancy-history/:id/checkout
- * For updating an existing occupancy record with a check_out time.
  */
 export const checkOutHistory = async (req, res) => {
   try {

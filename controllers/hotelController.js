@@ -47,7 +47,8 @@ const assignRoomByNumberModel = async (room_number, guest_id, hours_stay) => {
  *  - Assigns the room.
  *  - Retrieves available RFID cards and, if necessary, falls back to all RFIDs.
  *  - If the RFID is available, it assigns the RFID to the guest.
- *  - Finally, it creates the room occupancy history record (the only place where this record is created).
+ *  - Finally, it creates the room occupancy history record (the only place where this record is created),
+ *    and sets the event_indicator to "checkin".
  */
 export const checkinFlow = async (req, res) => {
   try {
@@ -167,6 +168,7 @@ export const checkinFlow = async (req, res) => {
     }
 
     // 6. Create the occupancy record – this is the only place that a record is created.
+    // We set event_indicator to "checkin"
     const occupancyData = {
       room_id: realRoomId,
       guest_id,
@@ -179,6 +181,7 @@ export const checkinFlow = async (req, res) => {
       was_early_checkout: false,
       occupant_snapshot: occupantSnapshot,
       mac_addresses_snapshot: {},
+      event_indicator: "checkin" // NEW: Indicator column set to "checkin"
     };
 
     const { data: occupancyRecord, error: occupancyError } = await createHistoryRecord(occupancyData);
