@@ -1,7 +1,42 @@
 // controllers/hotelController.js
-import { assignRoomByNumber } from '../models/roomsModel.js';
+import { findRoomByNumber, updateRoomByNumber } from '../models/roomsModel.js';
 import { getAvailableRFIDs, assignRFIDToGuest } from '../models/rfidModel.js';
 import { createHistoryRecord } from '../models/roomOccupancyHistoryModel.js';
+
+/**
+ * Helper function to assign a room by number.
+ * It validates the hours of stay, ensures the room exists and is available,
+ * and then reserves the room by updating its record.
+ */
+const assignRoomByNumberModel = async (room_number, guest_id, hours_stay) => {
+  const numericHoursStay = parseFloat(hours_stay);
+  if (isNaN(numericHoursStay) || numericHoursStay <= 0) {
+    return { data: null, error: new Error("Invalid hours_stay") };
+  }
+
+  // Find the room by its number
+  const { data: room, error: findError } = await findRoomByNumber(room_number);
+  if (findError) return { data: null, error: findError };
+  if (!room) return { data: null, error: new Error(`Room ${room_number} not found`) };
+  if (room.status !== 'available') {
+    return { data: null, error: new Error(`Room ${room_number} is not available`) };
+  }
+
+  // Update the room to reserve it
+  const updateFields = {
+    guest_id,
+    hours_stay: numericHoursStay,
+    status: 'reserved',
+    registration_time: new Date().toISOString(),
+  };
+
+  const { data, error } = await updateRoomByNumber(
+    room_number,
+    updateFields,
+    { onlyIfAvailable: false }
+  );
+  return { data, error };
+};
 
 /**
  * POST /api/hotel/checkin-flow
@@ -22,8 +57,8 @@ export const checkinFlow = async (req, res) => {
       });
     }
 
-    // 1. Assign the room by room number
-    const { data: roomData, error: roomError } = await assignRoomByNumber(
+    // 1. Assign the room using the helper function
+    const { data: roomData, error: roomError } = await assignRoomByNumberModel(
       room_number,
       guest_id,
       hours_stay
@@ -46,10 +81,9 @@ export const checkinFlow = async (req, res) => {
         error: rfidFetchError?.message || rfidFetchError
       });
     }
-    // availableRFIDs is expected as a dictionary; find by matching rfid_id
+    // Assuming availableRFIDs is an array
     let rfidUid;
-    for (const key in availableRFIDs) {
-      const item = availableRFIDs[key];
+    for (const item of availableRFIDs) {
       if (item.id === rfid_id) {
         rfidUid = item.rfid_uid;
         break;
@@ -81,16 +115,16 @@ export const checkinFlow = async (req, res) => {
     // 5. Create the occupancy record
     const occupancyData = {
       room_id: realRoomId,
-      guest_id: guest_id,
-      rfid_id: rfid_id,
+      guest_id,
+      rfid_id,
       registration_time: new Date().toISOString(),
       check_in: null,
       check_out: null,
-      hours_stay: hours_stay,
+      hours_stay,
       check_out_reason: null,
       was_early_checkout: false,
-      occupant_snapshot: {}, // You could also fetch the guest profile here
-      mac_addresses_snapshot: {} // You could pass additional MAC data if available
+      occupant_snapshot: {}, // Optionally, include guest profile data
+      mac_addresses_snapshot: {} // Optionally, include MAC data if available
     };
     const { data: occupancyRecord, error: occupancyError } = await createHistoryRecord(occupancyData);
     if (occupancyError || !occupancyRecord) {
