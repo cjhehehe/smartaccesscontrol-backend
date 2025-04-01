@@ -41,6 +41,18 @@ app.use(helmet());
 app.use(morgan('dev'));
 app.use(apiLimiter);
 
+// --- New Middleware for Guest Login Response Time ---
+app.use('/api/guests/login', (req, res, next) => {
+  const startTime = Date.now();
+  res.on('finish', () => {
+    if (res.statusCode === 200) {
+      const elapsed = Date.now() - startTime;
+      console.log(`[Guest Login] Successful login response time: ${elapsed} ms`);
+    }
+  });
+  next();
+});
+
 // Mount routes
 app.use('/api/auth', authRoutes);
 app.use('/api/guests', guestRoutes);
