@@ -36,9 +36,8 @@ export const submitServiceRequest = async (req, res) => {
     // 2) Build the payload
     const nowUtc = new Date().toISOString(); // current UTC timestamp
 
-    // NEW: Calculate end_time.
-    // In this implementation, we use the client-sent preferred_time as the end_time.
-    // (If you need more complex calculations, adjust here accordingly.)
+    // Calculate end_time.
+    // Here, we use the client-sent preferred_time as the end_time.
     const endTime = new Date(preferred_time).toISOString();
 
     const requestPayload = {
@@ -46,8 +45,8 @@ export const submitServiceRequest = async (req, res) => {
       guest_name,
       service_type,
       description,
-      preferred_time,          // The chosen future time from the guest.
-      end_time: endTime,       // NEW: The calculated end time.
+      preferred_time,         // The chosen future time from the guest.
+      end_time: endTime,      // The calculated end time.
       status: 'pending',
       created_at: nowUtc
     };
@@ -147,7 +146,7 @@ export const updateServiceRequestStatus = async (req, res) => {
         service_type,
         description,
         preferred_time,
-        end_time,          -- NEW: Include end_time
+        end_time,
         status,
         created_at
       `)

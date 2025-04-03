@@ -4,7 +4,7 @@ import supabase from '../config/supabase.js';
 /**
  * Create a new service request.
  * Expects requestData to include all required fields,
- * including the new `end_time` column.
+ * including the new end_time column.
  */
 export const createServiceRequest = async (requestData) => {
   try {
@@ -22,7 +22,7 @@ export const createServiceRequest = async (requestData) => {
         service_type,
         description,
         preferred_time,
-        end_time,         -- NEW: Include end_time
+        end_time,
         status,
         created_at
       `)
@@ -53,7 +53,7 @@ export const getServiceRequestsByGuest = async (guest_id, limit = 10, offset = 0
         service_type,
         description,
         preferred_time,
-        end_time,         -- NEW: Include end_time in selection
+        end_time,
         status,
         created_at
       `)
