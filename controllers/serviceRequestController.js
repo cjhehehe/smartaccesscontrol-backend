@@ -9,12 +9,18 @@ import { saveActivityLog } from '../models/activityLogModel.js';
 
 export const submitServiceRequest = async (req, res) => {
   try {
-    const { guest_id, guest_name, service_type, description, preferred_time } = req.body;
+    // Now expect delay_minutes (number) instead of preferred_time from the client
+    const { guest_id, guest_name, service_type, description, delay_minutes } = req.body;
 
-    // Validate required fields
-    if (!guest_id || !guest_name || !service_type || !description || !preferred_time) {
+    // Validate required fields (delay_minutes must be a positive number)
+    if (!guest_id || !guest_name || !service_type || !description || delay_minutes == null) {
       return res.status(400).json({
-        message: 'All fields are required: guest_id, guest_name, service_type, description, preferred_time'
+        message: 'All fields are required: guest_id, guest_name, service_type, description, delay_minutes'
+      });
+    }
+    if (typeof delay_minutes !== 'number' || delay_minutes <= 0) {
+      return res.status(400).json({
+        message: 'delay_minutes must be a positive number'
       });
     }
 
@@ -34,19 +40,19 @@ export const submitServiceRequest = async (req, res) => {
     }
 
     // 2) Build the payload
-    const nowUtc = new Date().toISOString(); // current UTC timestamp
+    const now = new Date();
+    const nowUtc = now.toISOString(); // current UTC timestamp
 
-    // Calculate end_time.
-    // Here, we use the client-sent preferred_time as the end_time.
-    const endTime = new Date(preferred_time).toISOString();
+    // Calculate preferred_time by adding delay_minutes to now
+    const preferredTime = new Date(now.getTime() + delay_minutes * 60000).toISOString();
 
     const requestPayload = {
       guest_id,
       guest_name,
       service_type,
       description,
-      preferred_time,         // The chosen future time from the guest.
-      end_time: endTime,      // The calculated end time.
+      delay_minutes,        // New: store the delay in minutes
+      preferred_time,       // Computed based on created_at + delay_minutes
       status: 'pending',
       created_at: nowUtc
     };
@@ -66,7 +72,7 @@ export const submitServiceRequest = async (req, res) => {
     // 4) Log the "request_created" event with UTC timestamp.
     if (newRequestId) {
       const logType = "request_created";
-      const logMessage = `Guest #${guest_id} created a ${service_type} request.`;
+      const logMessage = `Guest #${guest_id} created a ${service_type} request with a delay of ${delay_minutes} minutes.`;
       const { error: logError } = await saveActivityLog({
         request_id: newRequestId,
         guest_id,
@@ -91,7 +97,7 @@ export const submitServiceRequest = async (req, res) => {
         for (const admin of allAdmins) {
           const adminId = admin.id;
           const notifTitle = 'New Service Request';
-          const notifMessage = `Guest #${guest_id} submitted a ${service_type} request.`;
+          const notifMessage = `Guest #${guest_id} submitted a ${service_type} request with a delay of ${delay_minutes} minutes.`;
           const { error: notifError } = await createNotification({
             recipient_admin_id: adminId,
             title: notifTitle,
@@ -145,8 +151,8 @@ export const updateServiceRequestStatus = async (req, res) => {
         guest_name,
         service_type,
         description,
+        delay_minutes,
         preferred_time,
-        end_time,
         status,
         created_at
       `)
