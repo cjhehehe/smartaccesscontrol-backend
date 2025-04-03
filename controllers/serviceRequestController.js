@@ -51,8 +51,8 @@ export const submitServiceRequest = async (req, res) => {
       guest_name,
       service_type,
       description,
-      delay_minutes,        // New: store the delay in minutes
-      preferred_time,       // Computed based on created_at + delay_minutes
+      delay_minutes,                   // New: store the delay in minutes
+      preferred_time: preferredTime,   // Map the computed value explicitly
       status: 'pending',
       created_at: nowUtc
     };
