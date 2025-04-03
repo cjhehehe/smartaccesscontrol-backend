@@ -33,17 +33,26 @@ export const submitServiceRequest = async (req, res) => {
       return res.status(404).json({ message: 'Guest not found' });
     }
 
-    // 2) Insert the new service request with UTC timestamp for creation.
+    // 2) Build the payload
+    const nowUtc = new Date().toISOString(); // current UTC timestamp
+
+    // NEW: Calculate end_time.
+    // In this implementation, we use the client-sent preferred_time as the end_time.
+    // (If you need more complex calculations, adjust here accordingly.)
+    const endTime = new Date(preferred_time).toISOString();
+
     const requestPayload = {
       guest_id,
       guest_name,
       service_type,
       description,
-      preferred_time,
+      preferred_time,          // The chosen future time from the guest.
+      end_time: endTime,       // NEW: The calculated end time.
       status: 'pending',
-      created_at: new Date().toISOString()
+      created_at: nowUtc
     };
 
+    // 3) Insert the new service request
     const { data, error } = await createServiceRequest(requestPayload);
     if (error) {
       console.error('[submitServiceRequest] Database error:', error);
@@ -53,10 +62,9 @@ export const submitServiceRequest = async (req, res) => {
       });
     }
 
-    // 'data' now contains the newly created service request row.
     const newRequestId = data.id;
 
-    // 3) Log the "request_created" event with UTC timestamp.
+    // 4) Log the "request_created" event with UTC timestamp.
     if (newRequestId) {
       const logType = "request_created";
       const logMessage = `Guest #${guest_id} created a ${service_type} request.`;
@@ -73,7 +81,7 @@ export const submitServiceRequest = async (req, res) => {
       }
     }
 
-    // 4) Notify all admins about the new request
+    // 5) Notify all admins about the new request.
     try {
       const { data: allAdmins, error: adminsError } = await supabase
         .from('admins')
@@ -137,7 +145,11 @@ export const updateServiceRequestStatus = async (req, res) => {
         guest_id,
         guest_name,
         service_type,
-        status
+        description,
+        preferred_time,
+        end_time,          -- NEW: Include end_time
+        status,
+        created_at
       `)
       .single();
 
@@ -152,7 +164,7 @@ export const updateServiceRequestStatus = async (req, res) => {
       return res.status(404).json({ message: 'Service request not found.' });
     }
 
-    // 2) Log the status change event with UTC timestamp
+    // 2) Log the status change event with UTC timestamp.
     try {
       const { id: updatedRequestId, guest_id: guestId, service_type: stype, status: newStatus } = updatedData;
       let statusLabel = 'Pending';
@@ -174,7 +186,7 @@ export const updateServiceRequestStatus = async (req, res) => {
       console.error('[updateServiceRequestStatus] Unexpected error logging status change:', logCatchErr);
     }
 
-    // 3) Notify the guest about the status update
+    // 3) Notify the guest about the status update.
     try {
       const guestId = updatedData.guest_id;
       const serviceType = updatedData.service_type || 'service request';

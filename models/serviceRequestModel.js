@@ -4,11 +4,11 @@ import supabase from '../config/supabase.js';
 /**
  * Create a new service request.
  * Expects requestData to include all required fields,
- * and uses UTC timestamps for created_at.
+ * including the new `end_time` column.
  */
 export const createServiceRequest = async (requestData) => {
   try {
-    // Ensure the created_at field is in UTC
+    // Ensure the created_at field is set to now if not provided.
     if (!requestData.created_at) {
       requestData.created_at = new Date().toISOString();
     }
@@ -22,6 +22,7 @@ export const createServiceRequest = async (requestData) => {
         service_type,
         description,
         preferred_time,
+        end_time,         -- NEW: Include end_time
         status,
         created_at
       `)
@@ -52,6 +53,7 @@ export const getServiceRequestsByGuest = async (guest_id, limit = 10, offset = 0
         service_type,
         description,
         preferred_time,
+        end_time,         -- NEW: Include end_time in selection
         status,
         created_at
       `)
