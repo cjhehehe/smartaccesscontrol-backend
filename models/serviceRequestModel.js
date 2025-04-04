@@ -4,7 +4,7 @@ import supabase from '../config/supabase.js';
 /**
  * Create a new service request.
  * Expects requestData to include all required fields,
- * including the new delay_minutes column.
+ * including the new request_size column.
  */
 export const createServiceRequest = async (requestData) => {
   try {
@@ -23,6 +23,7 @@ export const createServiceRequest = async (requestData) => {
         description,
         delay_minutes,
         preferred_time,
+        request_size,
         status,
         created_at
       `)
@@ -54,6 +55,7 @@ export const getServiceRequestsByGuest = async (guest_id, limit = 10, offset = 0
         description,
         delay_minutes,
         preferred_time,
+        request_size,
         status,
         created_at
       `)

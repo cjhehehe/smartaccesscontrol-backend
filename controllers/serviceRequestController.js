@@ -5,10 +5,8 @@ import {
   getServiceRequestsByGuest
 } from '../models/serviceRequestModel.js';
 import { createNotification } from '../models/notificationModel.js';
-import {
-  createRequestLog,    // New import from requestLogsModel
-  logRequestSize       // New import from requestLogsModel
-} from '../models/requestLogsModel.js';
+// Remove the logRequestSize import since we no longer log the size
+import { createRequestLog } from '../models/requestLogsModel.js';
 
 export const submitServiceRequest = async (req, res) => {
   try {
@@ -49,18 +47,24 @@ export const submitServiceRequest = async (req, res) => {
     // Calculate preferred_time by adding delay_minutes to now
     const preferredTime = new Date(now.getTime() + delay_minutes * 60000).toISOString();
 
+    // Build the payload object
     const requestPayload = {
       guest_id,
       guest_name,
       service_type,
       description,
-      delay_minutes,         // store the delay in minutes
+      delay_minutes,
       preferred_time: preferredTime,
       status: 'pending',
       created_at: nowUtc
     };
 
-    // 3) Insert the new service request
+    // 3) Calculate the JSON payload size (in bytes)
+    const requestSize = Buffer.byteLength(JSON.stringify(requestPayload), 'utf8');
+    // Add request_size to the payload so it gets stored in service_requests table
+    requestPayload.request_size = requestSize;
+
+    // 4) Insert the new service request
     const { data, error } = await createServiceRequest(requestPayload);
     if (error) {
       console.error('[submitServiceRequest] Database error:', error);
@@ -70,22 +74,12 @@ export const submitServiceRequest = async (req, res) => {
       });
     }
 
-    // 4) Calculate the JSON payload size and log it in request_logs
-    const requestSize = Buffer.byteLength(JSON.stringify(requestPayload), 'utf8');
-    const { error: logSizeError } = await logRequestSize(requestSize);
-    if (logSizeError) {
-      console.error('[submitServiceRequest] Error logging request size:', logSizeError);
-      // Continue processing even if logging fails
-    }
-
     const newRequestId = data.id;
 
-    // 5) Log the "request_created" event
+    // 5) Log the "request_created" event (without request_size)
     if (newRequestId) {
       const logType = 'request_created';
       const logMessage = `Guest #${guest_id} created a ${service_type} request with a delay of ${delay_minutes} minutes.`;
-
-      // We now call createRequestLog instead of saveActivityLog
       const { error: logError } = await createRequestLog({
         request_id: newRequestId,
         guest_id,

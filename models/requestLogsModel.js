@@ -4,7 +4,7 @@ import supabase from '../config/supabase.js';
 /**
  * Creates a request log entry in the `request_logs` table.
  * Accepts any of the following properties:
- *   - request_id, admin_id, guest_id, log_type, log_message, request_size
+ *   - request_id, admin_id, guest_id, log_type, log_message
  * The created_at field defaults to now() in the database.
  */
 export const createRequestLog = async ({
@@ -12,8 +12,7 @@ export const createRequestLog = async ({
   admin_id,
   guest_id,
   log_type,
-  log_message,
-  request_size
+  log_message
 }) => {
   try {
     const insertObj = {
@@ -21,8 +20,7 @@ export const createRequestLog = async ({
       admin_id,
       guest_id,
       log_type,
-      log_message,
-      request_size
+      log_message
     };
     const { data, error } = await supabase
       .from('request_logs')
@@ -42,10 +40,12 @@ export const createRequestLog = async ({
 };
 
 /**
- * A helper that logs only the request payload size.
+ * A helper that previously logged only the request payload size.
+ * (Now removed because request_size is stored in service_requests.)
  */
 export const logRequestSize = async (request_size) => {
-  return await createRequestLog({ request_size });
+  // No longer used. Optionally, you can simply return a resolved promise.
+  return Promise.resolve({ data: null, error: null });
 };
 
 /**
