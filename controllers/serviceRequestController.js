@@ -5,7 +5,10 @@ import {
   getServiceRequestsByGuest
 } from '../models/serviceRequestModel.js';
 import { createNotification } from '../models/notificationModel.js';
-import { saveActivityLog } from '../models/activityLogModel.js';
+import {
+  createRequestLog,    // New import from requestLogsModel
+  logRequestSize       // New import from requestLogsModel
+} from '../models/requestLogsModel.js';
 
 export const submitServiceRequest = async (req, res) => {
   try {
@@ -51,8 +54,8 @@ export const submitServiceRequest = async (req, res) => {
       guest_name,
       service_type,
       description,
-      delay_minutes,                   // New: store the delay in minutes
-      preferred_time: preferredTime,   // Map the computed value explicitly
+      delay_minutes,         // store the delay in minutes
+      preferred_time: preferredTime,
       status: 'pending',
       created_at: nowUtc
     };
@@ -67,26 +70,34 @@ export const submitServiceRequest = async (req, res) => {
       });
     }
 
+    // 4) Calculate the JSON payload size and log it in request_logs
+    const requestSize = Buffer.byteLength(JSON.stringify(requestPayload), 'utf8');
+    const { error: logSizeError } = await logRequestSize(requestSize);
+    if (logSizeError) {
+      console.error('[submitServiceRequest] Error logging request size:', logSizeError);
+      // Continue processing even if logging fails
+    }
+
     const newRequestId = data.id;
 
-    // 4) Log the "request_created" event with UTC timestamp.
+    // 5) Log the "request_created" event
     if (newRequestId) {
-      const logType = "request_created";
+      const logType = 'request_created';
       const logMessage = `Guest #${guest_id} created a ${service_type} request with a delay of ${delay_minutes} minutes.`;
-      const { error: logError } = await saveActivityLog({
+
+      // We now call createRequestLog instead of saveActivityLog
+      const { error: logError } = await createRequestLog({
         request_id: newRequestId,
         guest_id,
         log_type: logType,
-        log_message: logMessage,
-        timestamp: new Date().toISOString()
+        log_message: logMessage
       });
       if (logError) {
         console.error('[submitServiceRequest] Error saving service request log:', logError);
-        // Continue without failing the request.
       }
     }
 
-    // 5) Notify all admins about the new request.
+    // 6) Notify all admins about the new request
     try {
       const { data: allAdmins, error: adminsError } = await supabase
         .from('admins')
@@ -169,20 +180,27 @@ export const updateServiceRequestStatus = async (req, res) => {
       return res.status(404).json({ message: 'Service request not found.' });
     }
 
-    // 2) Log the status change event with UTC timestamp.
+    // 2) Log the status change event
     try {
-      const { id: updatedRequestId, guest_id: guestId, service_type: stype, status: newStatus } = updatedData;
+      const {
+        id: updatedRequestId,
+        guest_id: guestId,
+        service_type: stype,
+        status: newStatus
+      } = updatedData;
+
       let statusLabel = 'Pending';
       if (newStatus === 'in_progress') statusLabel = 'In Progress';
       else if (newStatus === 'completed') statusLabel = 'Completed';
       else if (newStatus === 'canceled') statusLabel = 'Canceled';
 
-      const { error: logError } = await saveActivityLog({
+      const logMessage = `Status changed to ${statusLabel}.`;
+
+      const { error: logError } = await createRequestLog({
         request_id: updatedRequestId,
         guest_id: guestId,
-        log_type: "status_change",
-        log_message: `Status changed to ${statusLabel}.`,
-        timestamp: new Date().toISOString()
+        log_type: 'status_change',
+        log_message: logMessage
       });
       if (logError) {
         console.error('[updateServiceRequestStatus] Error saving status_change log:', logError);
@@ -191,7 +209,7 @@ export const updateServiceRequestStatus = async (req, res) => {
       console.error('[updateServiceRequestStatus] Unexpected error logging status change:', logCatchErr);
     }
 
-    // 3) Notify the guest about the status update.
+    // 3) Notify the guest about the status update
     try {
       const guestId = updatedData.guest_id;
       const serviceType = updatedData.service_type || 'service request';

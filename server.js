@@ -14,7 +14,8 @@ import rfidRoutes from './routes/rfidRoutes.js';
 import serviceRequestRoutes from './routes/serviceRequestRoutes.js';
 import roomsRoutes from './routes/roomsRoutes.js';
 import accessLogRoutes from './routes/accessLogRoutes.js';
-import activityLogRoutes from './routes/activityLogRoutes.js';
+// Remove the old activity logs import:
+// import activityLogRoutes from './routes/activityLogRoutes.js';
 import feedbackRoutes from './routes/feedbackRoutes.js';
 import notificationRoutes from './routes/notificationRoutes.js';
 import macAddressRoutes from './routes/macAddressRoutes.js';
@@ -24,6 +25,8 @@ import roomOccupancyHistoryRoutes from './routes/roomOccupancyHistoryRoutes.js';
 
 // NEW: Import hotel routes
 import hotelRoutes from './routes/hotelRoutes.js';
+// NEW: Import the new request logs routes
+import requestLogsRoutes from './routes/requestLogsRoutes.js';
 
 // NEW: Import the cron job
 import './cronJobs.js';
@@ -61,7 +64,9 @@ app.use('/api/rfid', rfidRoutes);
 app.use('/api/service-requests', serviceRequestRoutes);
 app.use('/api/rooms', roomsRoutes);
 app.use('/api/access-logs', accessLogRoutes);
-app.use('/api/activity-logs', activityLogRoutes);
+// Remove the old activity logs mounting:
+// app.use('/api/activity-logs', activityLogRoutes);
+app.use('/api/request-logs', requestLogsRoutes); // NEW: mount request logs routes
 app.use('/api/feedback', feedbackRoutes);
 app.use('/api/notifications', notificationRoutes);
 app.use('/api/mac-address', macAddressRoutes);
