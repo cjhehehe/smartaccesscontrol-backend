@@ -7,11 +7,9 @@ import supabase from '../config/supabase.js';
  */
 export const submitFeedback = async (feedbackData) => {
   try {
-    // Default status to 'pending' if not provided
     if (!feedbackData.status) {
       feedbackData.status = 'pending';
     }
-    // Ensure created_at is in UTC if not provided
     if (!feedbackData.created_at) {
       feedbackData.created_at = new Date().toISOString();
     }

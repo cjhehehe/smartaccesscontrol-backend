@@ -7,6 +7,9 @@ import {
 } from '../models/feedbackModel.js';
 import { createNotification } from '../models/notificationModel.js';
 
+// For FCM push notifications (if you want to send them directly here)
+import { sendNotification } from '../services/fcmService.js';
+
 /**
  * Handle POST /api/feedback/submit
  * Creates new feedback or complaint for a guest.
@@ -24,7 +27,7 @@ export const submitGuestFeedback = async (req, res) => {
     // 1) Verify guest exists
     const { data: guest, error: guestError } = await supabase
       .from('guests')
-      .select('id, name')
+      .select('id, name, fcm_token')
       .eq('id', guest_id)
       .maybeSingle();
 
@@ -39,14 +42,14 @@ export const submitGuestFeedback = async (req, res) => {
       return res.status(404).json({ message: 'Guest not found' });
     }
 
-    // 2) Insert feedback with "created_at" in UTC
+    // 2) Insert feedback
     const created_at = new Date().toISOString();
     const { data: feedbackData, error: feedbackError } = await submitFeedback({
       guest_id,
       guest_name,
       feedback_type,
       description,
-      status: 'pending', // default
+      status: 'pending',
       created_at,
     });
 
@@ -62,15 +65,16 @@ export const submitGuestFeedback = async (req, res) => {
     try {
       const { data: allAdmins, error: adminsError } = await supabase
         .from('admins')
-        .select('id');
-
+        .select('id, fcm_token');
       if (adminsError) {
         console.error('[Feedback] Error fetching admins for notification:', adminsError);
       } else if (allAdmins && allAdmins.length > 0) {
         for (const admin of allAdmins) {
           const adminId = admin.id;
           const notifTitle = 'New Feedback/Complaint';
-          const notifMessage = `Guest #${guest_id} submitted a ${feedback_type} feedback.`;
+          const notifMessage = `Guest #${guest_id} submitted a ${feedback_type}.`;
+
+          // Create a DB notification record
           const { error: notifError } = await createNotification({
             recipient_admin_id: adminId,
             title: notifTitle,
@@ -80,13 +84,26 @@ export const submitGuestFeedback = async (req, res) => {
           if (notifError) {
             console.error(`[Feedback] Failed to notify admin ${adminId}:`, notifError);
           }
+
+          // Optionally send an FCM push notification if admin.fcm_token is not null
+          if (admin.fcm_token) {
+            try {
+              await sendNotification(
+                admin.fcm_token,
+                notifTitle,
+                notifMessage,
+                { userType: 'admin' } // No requestId here, but you can add a "feedbackId" if you want
+              );
+            } catch (pushErr) {
+              console.error(`[Feedback] Push notification failed for admin ${adminId}:`, pushErr);
+            }
+          }
         }
       }
     } catch (notifCatchErr) {
       console.error('[Feedback] Unexpected error creating admin notifications:', notifCatchErr);
     }
 
-    // 4) Return success
     return res.status(201).json({
       message: 'Feedback submitted successfully',
       data: feedbackData,
@@ -190,6 +207,31 @@ export const replyToFeedbackComplaint = async (req, res) => {
       });
       if (notifError) {
         console.error('[Feedback] Failed to notify guest:', notifError);
+      }
+
+      // Optionally send an FCM push notification if the guest has an fcm_token
+      const { data: guestRecord, error: guestErr } = await supabase
+        .from('guests')
+        .select('fcm_token')
+        .eq('id', guest_id)
+        .maybeSingle();
+      if (guestErr) {
+        console.error('[Feedback] Error fetching guest fcm_token:', guestErr);
+      } else if (guestRecord && guestRecord.fcm_token) {
+        try {
+          await sendNotification(
+            guestRecord.fcm_token,
+            notifTitle,
+            notifMessage,
+            {
+              userType: 'guest',
+              // Optionally, you can add "feedbackId" to the data
+              // feedbackId: id.toString()
+            }
+          );
+        } catch (pushErr) {
+          console.error('[Feedback] Push notification failed for guest:', pushErr);
+        }
       }
     } catch (notifCatchErr) {
       console.error('[Feedback] Unexpected error creating guest notification:', notifCatchErr);
