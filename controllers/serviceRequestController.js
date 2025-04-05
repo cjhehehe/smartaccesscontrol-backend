@@ -5,12 +5,14 @@ import {
   getServiceRequestsByGuest
 } from '../models/serviceRequestModel.js';
 import { createNotification } from '../models/notificationModel.js';
-// Remove the logRequestSize import since we no longer log the size
+// Log request event in request logs
 import { createRequestLog } from '../models/requestLogsModel.js';
+// Import our FCM service to send push notifications
+import { sendNotification } from '../services/fcmService.js';
 
 export const submitServiceRequest = async (req, res) => {
   try {
-    // Now expect delay_minutes (number) instead of preferred_time from the client
+    // Expect delay_minutes (number) from the client
     const { guest_id, guest_name, service_type, description, delay_minutes } = req.body;
 
     // Validate required fields (delay_minutes must be a positive number)
@@ -43,11 +45,9 @@ export const submitServiceRequest = async (req, res) => {
     // 2) Build the payload
     const now = new Date();
     const nowUtc = now.toISOString(); // current UTC timestamp
-
     // Calculate preferred_time by adding delay_minutes to now
     const preferredTime = new Date(now.getTime() + delay_minutes * 60000).toISOString();
 
-    // Build the payload object
     const requestPayload = {
       guest_id,
       guest_name,
@@ -59,9 +59,8 @@ export const submitServiceRequest = async (req, res) => {
       created_at: nowUtc
     };
 
-    // 3) Calculate the JSON payload size (in bytes)
+    // 3) Calculate JSON payload size (in bytes)
     const requestSize = Buffer.byteLength(JSON.stringify(requestPayload), 'utf8');
-    // Add request_size to the payload so it gets stored in service_requests table
     requestPayload.request_size = requestSize;
 
     // 4) Insert the new service request
@@ -73,10 +72,9 @@ export const submitServiceRequest = async (req, res) => {
         error: error.message
       });
     }
-
     const newRequestId = data.id;
 
-    // 5) Log the "request_created" event (without request_size)
+    // 5) Log the "request_created" event (excluding request_size)
     if (newRequestId) {
       const logType = 'request_created';
       const logMessage = `Guest #${guest_id} created a ${service_type} request with a delay of ${delay_minutes} minutes.`;
@@ -91,18 +89,21 @@ export const submitServiceRequest = async (req, res) => {
       }
     }
 
-    // 6) Notify all admins about the new request
+    // 6) Notify all admins about the new request:
     try {
-      const { data: allAdmins, error: adminsError } = await supabase
+      // Query admins with non-null fcm_token
+      const { data: adminList, error: adminsError } = await supabase
         .from('admins')
-        .select('id');
+        .select('id, fcm_token')
+        .neq('fcm_token', null);
       if (adminsError) {
-        console.error('[submitServiceRequest] Error fetching admins for notification:', adminsError);
-      } else if (allAdmins && allAdmins.length > 0) {
-        for (const admin of allAdmins) {
+        console.error('[submitServiceRequest] Error fetching admins for push notification:', adminsError);
+      } else if (adminList && adminList.length > 0) {
+        for (const admin of adminList) {
           const adminId = admin.id;
           const notifTitle = 'New Service Request';
           const notifMessage = `Guest #${guest_id} submitted a ${service_type} request with a delay of ${delay_minutes} minutes.`;
+          // Create notification record in the database
           const { error: notifError } = await createNotification({
             recipient_admin_id: adminId,
             title: notifTitle,
@@ -111,7 +112,20 @@ export const submitServiceRequest = async (req, res) => {
             created_at: new Date().toISOString()
           });
           if (notifError) {
-            console.error(`[submitServiceRequest] Failed to notify admin ${adminId}:`, notifError);
+            console.error(`[submitServiceRequest] Failed to create notification for admin ${adminId}:`, notifError);
+          }
+          // Send push notification using FCM (if fcm_token exists)
+          if (admin.fcm_token) {
+            try {
+              await sendNotification(
+                admin.fcm_token,
+                notifTitle,
+                notifMessage,
+                { requestId: newRequestId.toString() }
+              );
+            } catch (pushErr) {
+              console.error(`[submitServiceRequest] Push notification failed for admin ${adminId}:`, pushErr);
+            }
           }
         }
       }
@@ -133,18 +147,13 @@ export const updateServiceRequestStatus = async (req, res) => {
   try {
     const { request_id } = req.params;
     const { status } = req.body;
-
     if (!request_id || !status) {
-      return res.status(400).json({
-        message: 'Missing request_id or status in request.'
-      });
+      return res.status(400).json({ message: 'Missing request_id or status in request.' });
     }
-
     const reqIdNum = parseInt(request_id, 10);
     if (isNaN(reqIdNum)) {
       return res.status(400).json({ message: 'Invalid request_id format.' });
     }
-
     // 1) Update the service request row
     const { data: updatedData, error: updateError } = await supabase
       .from('service_requests')
@@ -162,7 +171,6 @@ export const updateServiceRequestStatus = async (req, res) => {
         created_at
       `)
       .single();
-
     if (updateError) {
       console.error('[updateServiceRequestStatus] Error updating service request status:', updateError);
       return res.status(500).json({
@@ -173,7 +181,6 @@ export const updateServiceRequestStatus = async (req, res) => {
     if (!updatedData) {
       return res.status(404).json({ message: 'Service request not found.' });
     }
-
     // 2) Log the status change event
     try {
       const {
@@ -182,14 +189,11 @@ export const updateServiceRequestStatus = async (req, res) => {
         service_type: stype,
         status: newStatus
       } = updatedData;
-
       let statusLabel = 'Pending';
       if (newStatus === 'in_progress') statusLabel = 'In Progress';
       else if (newStatus === 'completed') statusLabel = 'Completed';
       else if (newStatus === 'canceled') statusLabel = 'Canceled';
-
       const logMessage = `Status changed to ${statusLabel}.`;
-
       const { error: logError } = await createRequestLog({
         request_id: updatedRequestId,
         guest_id: guestId,
@@ -202,7 +206,6 @@ export const updateServiceRequestStatus = async (req, res) => {
     } catch (logCatchErr) {
       console.error('[updateServiceRequestStatus] Unexpected error logging status change:', logCatchErr);
     }
-
     // 3) Notify the guest about the status update
     try {
       const guestId = updatedData.guest_id;
@@ -212,10 +215,8 @@ export const updateServiceRequestStatus = async (req, res) => {
       if (newStatus === 'in_progress') statusLabel = 'In Progress';
       else if (newStatus === 'completed') statusLabel = 'Completed';
       else if (newStatus === 'canceled') statusLabel = 'Canceled';
-
       const notifTitle = 'Service Request Updated';
       const notifMessage = `Your ${serviceType} request is now ${statusLabel}.`;
-
       const { error: notifError } = await createNotification({
         recipient_guest_id: guestId,
         title: notifTitle,
@@ -223,14 +224,12 @@ export const updateServiceRequestStatus = async (req, res) => {
         notification_type: 'service_request',
         created_at: new Date().toISOString()
       });
-
       if (notifError) {
         console.error('[updateServiceRequestStatus] Failed to create guest notification:', notifError);
       }
     } catch (notifCatchErr) {
       console.error('[updateServiceRequestStatus] Unexpected error notifying guest about status change:', notifCatchErr);
     }
-
     return res.status(200).json({
       message: `Service request #${request_id} status updated to ${status}.`,
       data: updatedData
@@ -248,13 +247,11 @@ export const getServiceRequests = async (req, res) => {
     if (!guest_id) {
       return res.status(400).json({ message: 'Guest ID is required' });
     }
-
     const { data, error } = await getServiceRequestsByGuest(
       guest_id,
-      parseInt(limit),
-      parseInt(offset)
+      parseInt(limit, 10),
+      parseInt(offset, 10)
     );
-
     if (error) {
       console.error('[getServiceRequests] Database error:', error);
       return res.status(500).json({
@@ -262,11 +259,9 @@ export const getServiceRequests = async (req, res) => {
         error: error.message
       });
     }
-
     if (!data || data.length === 0) {
       return res.status(404).json({ message: 'No service requests found for this guest' });
     }
-
     return res.status(200).json({
       message: 'Service requests fetched successfully',
       data
