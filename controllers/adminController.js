@@ -249,11 +249,13 @@ export const updateAdminFcmToken = async (req, res) => {
     if (!adminId || !fcmToken) {
       return res.status(400).json({ message: 'adminId and fcmToken are required.' });
     }
+    // Added .select() to return the updated row(s)
     const { data, error } = await supabase
       .from('admins')
       .update({ fcm_token: fcmToken })
-      .eq('id', adminId);
-    if (error || !data) {
+      .eq('id', adminId)
+      .select();
+    if (error || !data || data.length === 0) {
       console.error('[Admin] Error updating FCM token:', error);
       return res.status(500).json({ message: 'Failed to update FCM token.' });
     }
