@@ -10,6 +10,7 @@ import {
   uploadGuestAvatar,
   searchGuests,
   getAllGuests,
+  updateGuestFcmToken,
 } from '../controllers/guestController.js';
 
 const router = express.Router();
@@ -40,5 +41,8 @@ router.post('/upload_avatar', uploadGuestAvatar);
 
 // POST /api/guests/sign_out
 router.post('/sign_out', signOutGuest);
+
+// NEW: POST /api/guests/update-fcm-token
+router.post('/update-fcm-token', updateGuestFcmToken);
 
 export default router;

@@ -330,6 +330,27 @@ export const signOutGuest = async (req, res) => {
   }
 };
 
+/**
+ * Update Guest FCM Token.
+ */
+export const updateGuestFcmToken = async (req, res) => {
+  try {
+    const { guestId, fcmToken } = req.body;
+    if (!guestId || !fcmToken) {
+      return res.status(400).json({ message: 'guestId and fcmToken are required.' });
+    }
+    const { data, error } = await updateUser(guestId, { fcm_token: fcmToken });
+    if (error || !data) {
+      console.error('[Guest] Error updating FCM token:', error);
+      return res.status(500).json({ message: 'Failed to update FCM token.' });
+    }
+    return res.status(200).json({ message: 'FCM token updated successfully.' });
+  } catch (err) {
+    console.error('[Guest] Exception updating FCM token:', err);
+    return res.status(500).json({ message: 'Internal server error.' });
+  }
+};
+
 /************************************************
  * Search guests by name, email, or phone.
  ************************************************/

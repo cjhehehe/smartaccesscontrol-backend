@@ -52,4 +52,4 @@ export const loginAdmin = async (req, res) => {
   }
 };
 
-// (Additional auth functions can be added here if needed)
+// Additional auth functions can be added here if needed.
