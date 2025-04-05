@@ -138,12 +138,8 @@ export const getGuestFeedback = async (req, res) => {
       });
     }
 
-    // IMPORTANT FIX: Return 200 even if empty array
     if (!data || data.length === 0) {
-      return res.status(200).json({
-        message: 'No feedback found for this guest',
-        data: [],
-      });
+      return res.status(404).json({ message: 'No feedback found for this guest' });
     }
 
     return res.status(200).json({
@@ -163,12 +159,7 @@ export const getGuestFeedback = async (req, res) => {
 export const replyToFeedbackComplaint = async (req, res) => {
   try {
     const { id } = req.params;
-    const {
-      admin_reply,
-      status,
-      admin_id,
-      guest_id,
-    } = req.body;
+    const { admin_reply, status, admin_id, guest_id } = req.body;
 
     if (!id) {
       return res
@@ -234,7 +225,8 @@ export const replyToFeedbackComplaint = async (req, res) => {
             {
               userType: 'guest',
               notification_type: 'feedback',
-              feedbackId: id.toString()
+              feedbackId: id.toString(),
+              guestId: guest_id.toString() // <-- Added to ensure correct guest ID is passed
             }
           );
         } catch (pushErr) {
