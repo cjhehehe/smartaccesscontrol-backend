@@ -85,14 +85,18 @@ export const submitGuestFeedback = async (req, res) => {
             console.error(`[Feedback] Failed to notify admin ${adminId}:`, notifError);
           }
 
-          // Optionally send an FCM push notification if admin.fcm_token is not null
+          // Send an FCM push notification if admin.fcm_token is not null
           if (admin.fcm_token) {
             try {
               await sendNotification(
                 admin.fcm_token,
                 notifTitle,
                 notifMessage,
-                { userType: 'admin' } // No requestId here, but you can add a "feedbackId" if you want
+                { 
+                  userType: 'admin',
+                  notification_type: 'feedback',
+                  feedbackId: feedbackData.id.toString()
+                }
               );
             } catch (pushErr) {
               console.error(`[Feedback] Push notification failed for admin ${adminId}:`, pushErr);
@@ -225,8 +229,8 @@ export const replyToFeedbackComplaint = async (req, res) => {
             notifMessage,
             {
               userType: 'guest',
-              // Optionally, you can add "feedbackId" to the data
-              // feedbackId: id.toString()
+              notification_type: 'feedback',
+              feedbackId: id.toString()
             }
           );
         } catch (pushErr) {
