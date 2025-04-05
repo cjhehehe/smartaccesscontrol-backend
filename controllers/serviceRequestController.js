@@ -247,12 +247,19 @@ export const updateServiceRequestStatus = async (req, res) => {
       if (guestErr) {
         console.error('[updateServiceRequestStatus] Error fetching guest fcm_token:', guestErr);
       } else if (guestRecord && guestRecord.fcm_token) {
-        // (c) Send push notification to the guest’s device
+        // (c) Send push notification to the guest’s device.
+        // The payload now includes extra fields so the guest app knows to redirect
+        // to room_service_page.dart (via initialTab set to '1').
         await sendNotification(
           guestRecord.fcm_token,
           notifTitle,
           notifMessage,
-          { requestId: updatedData.id.toString() }
+          {
+            requestId: updatedData.id.toString(),
+            userType: 'guest',
+            guestId: guestId.toString(),
+            initialTab: '1'
+          }
         );
         console.log(`[updateServiceRequestStatus] Guest #${guestId} notified via FCM.`);
       }
