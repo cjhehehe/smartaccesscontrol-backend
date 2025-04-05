@@ -12,8 +12,7 @@ import {
 } from '../models/userModel.js';
 
 /**
- * Convert "bigint" or "{ low: number, high: number }" ID to a plain number.
- * (Helper function used by multiple exports below.)
+ * Helper function to fix ID format.
  */
 function fixId(obj) {
   if (!obj) return;
@@ -27,8 +26,7 @@ function fixId(obj) {
 }
 
 /**
- * Register a new guest with an optional membership level.
- * The membership_start timestamp is stored in UTC.
+ * Register a new guest.
  */
 export const registerGuest = async (req, res) => {
   try {
@@ -39,7 +37,7 @@ export const registerGuest = async (req, res) => {
       });
     }
 
-    // 1) Check if email already exists
+    // Check if email already exists
     const { data: existingEmail, error: emailCheckErr } = await findUserByEmail(email);
     if (emailCheckErr) {
       console.error('[Guest] Error checking existing email:', emailCheckErr);
@@ -51,7 +49,7 @@ export const registerGuest = async (req, res) => {
       });
     }
 
-    // 2) Check if phone already exists
+    // Check if phone already exists
     const { data: existingPhone, error: phoneCheckErr } = await findUserByPhone(phone);
     if (phoneCheckErr) {
       console.error('[Guest] Error checking existing phone:', phoneCheckErr);
@@ -63,10 +61,8 @@ export const registerGuest = async (req, res) => {
       });
     }
 
-    // 3) Hash the password
     const hashedPassword = await bcrypt.hash(password, 10);
 
-    // 4) Prepare user object
     const newUser = {
       name,
       email,
@@ -80,27 +76,20 @@ export const registerGuest = async (req, res) => {
 
     console.log('[Guest] Registering new guest:', newUser);
 
-    // 5) Insert into DB
     const { data, error } = await createUser(newUser);
     if (error) {
-      // If Supabase returns a uniqueness violation or other constraint error, handle it:
       const errorMsg = error.message || '';
       console.error('[Guest] Database Insert Error:', errorMsg);
-
       if (errorMsg.includes('duplicate key value')) {
-        // Unique constraint was violated
         return res.status(409).json({
           message: 'Email or phone is already in use. Please use different credentials.',
         });
       }
-      // Otherwise, return a generic 500
       return res.status(500).json({ message: 'Database error: Unable to register guest.' });
     }
 
-    // 6) Fix ID if needed
     fixId(data);
 
-    // 7) Return success
     return res.status(201).json({
       message: 'Guest registered successfully.',
       data,
@@ -112,7 +101,7 @@ export const registerGuest = async (req, res) => {
 };
 
 /**
- * Guest Login (supports identifier as either email or phone).
+ * Guest Login (by email or phone).
  */
 export const loginGuest = async (req, res) => {
   try {
@@ -176,7 +165,6 @@ export const loginGuest = async (req, res) => {
 
 /**
  * Fetch a single Guest Profile by ID.
- * Returns { success: true, statusCode: 200, data: {...} } on success.
  */
 export const fetchGuestProfileById = async (req, res) => {
   try {
@@ -206,10 +194,8 @@ export const fetchGuestProfileById = async (req, res) => {
       });
     }
 
-    // Convert bigints if necessary
     fixId(guest);
 
-    // Return all columns in "data"
     return res.status(200).json({
       success: true,
       statusCode: 200,
@@ -224,7 +210,6 @@ export const fetchGuestProfileById = async (req, res) => {
     });
   }
 };
-
 
 /**
  * Change Guest Password.
@@ -351,7 +336,7 @@ export const signOutGuest = async (req, res) => {
 export const searchGuests = async (req, res) => {
   try {
     const { query } = req.query;
-    console.log('[Guest] searchGuests called with query:', query); // Debug log
+    console.log('[Guest] searchGuests called with query:', query);
 
     if (!query || query.trim() === '') {
       return res.status(400).json({ message: 'Query string is required.' });
@@ -362,11 +347,8 @@ export const searchGuests = async (req, res) => {
       return res.status(500).json({ message: 'Database error occurred.' });
     }
     if (!guests || guests.length === 0) {
-      // 404 if no matches
       return res.status(404).json({ message: 'No matching guest found.' });
     }
-
-    // If guests found, fix IDs and return 200
     guests.forEach((g) => fixId(g));
     console.log(`[Guest] Found ${guests.length} guest(s). Returning 200...`);
     return res.status(200).json({ guests });

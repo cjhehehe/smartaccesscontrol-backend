@@ -12,25 +12,16 @@ import {
 } from '../models/notificationModel.js';
 
 /**
- * Create a new notification (for Guest).
+ * Create a new notification for Guest.
  */
 export const createNewNotification = async (req, res) => {
   try {
-    const {
-      recipient_guest_id,
-      title,
-      message,
-      notification_type, // optional
-      note_message       // optional
-    } = req.body;
-
+    const { recipient_guest_id, title, message, notification_type, note_message } = req.body;
     if (!recipient_guest_id || !title || !message) {
       return res.status(400).json({
         message: 'Missing required fields: recipient_guest_id, title, message'
       });
     }
-
-    // Create a single row for the guest
     const { data, error } = await createNotification({
       recipient_guest_id,
       title,
@@ -38,18 +29,13 @@ export const createNewNotification = async (req, res) => {
       note_message,
       notification_type
     });
-
     if (error) {
       return res.status(500).json({
         message: 'Database error: Unable to create notification',
         error: error.message
       });
     }
-
-    return res.status(201).json({
-      message: 'Notification created successfully',
-      data
-    });
+    return res.status(201).json({ message: 'Notification created successfully', data });
   } catch (err) {
     console.error('[Notification] Unexpected Error in createNewNotification:', err);
     return res.status(500).json({ message: 'Internal server error' });
@@ -57,25 +43,16 @@ export const createNewNotification = async (req, res) => {
 };
 
 /**
- * Create a new notification (for Admin).
+ * Create a new notification for Admin.
  */
 export const createAdminNotification = async (req, res) => {
   try {
-    const {
-      recipient_admin_id,
-      title,
-      message,
-      notification_type, // optional
-      note_message       // optional
-    } = req.body;
-
+    const { recipient_admin_id, title, message, notification_type, note_message } = req.body;
     if (!recipient_admin_id || !title || !message) {
       return res.status(400).json({
         message: 'Missing required fields: recipient_admin_id, title, message'
       });
     }
-
-    // Create a single row for the admin
     const { data, error } = await createNotification({
       recipient_admin_id,
       title,
@@ -83,18 +60,13 @@ export const createAdminNotification = async (req, res) => {
       note_message,
       notification_type
     });
-
     if (error) {
       return res.status(500).json({
         message: 'Database error: Unable to create admin notification',
         error: error.message
       });
     }
-
-    return res.status(201).json({
-      message: 'Admin notification created successfully',
-      data
-    });
+    return res.status(201).json({ message: 'Admin notification created successfully', data });
   } catch (err) {
     console.error('[Notification] Unexpected Error in createAdminNotification:', err);
     return res.status(500).json({ message: 'Internal server error' });
@@ -102,39 +74,27 @@ export const createAdminNotification = async (req, res) => {
 };
 
 /**
- * (NEW) Create notifications for BOTH Guest and Admin in one call.
- * This will insert two rows in the "notifications" table:
- *   - One with recipient_guest_id
- *   - One with recipient_admin_id
+ * Create notifications for BOTH Guest and Admin.
  */
 export const createGuestAndAdminNotification = async (req, res) => {
   try {
     const {
-      guest_id,          // ID of the guest
-      admin_id,          // ID of the admin
+      guest_id,
+      admin_id,
       guest_title,
       guest_message,
       admin_title,
       admin_message,
-      notification_type, // optional
-      note_message       // optional
+      notification_type,
+      note_message
     } = req.body;
 
-    // Basic validation
-    if (
-      !guest_id ||
-      !admin_id ||
-      !guest_title ||
-      !guest_message ||
-      !admin_title ||
-      !admin_message
-    ) {
+    if (!guest_id || !admin_id || !guest_title || !guest_message || !admin_title || !admin_message) {
       return res.status(400).json({
         message: 'Missing required fields: guest_id, admin_id, guest_title, guest_message, admin_title, admin_message'
       });
     }
 
-    // 1) Create the guest notification
     const { data: guestData, error: guestError } = await createNotification({
       recipient_guest_id: guest_id,
       title: guest_title,
@@ -149,7 +109,6 @@ export const createGuestAndAdminNotification = async (req, res) => {
       });
     }
 
-    // 2) Create the admin notification
     const { data: adminData, error: adminError } = await createNotification({
       recipient_admin_id: admin_id,
       title: admin_title,
@@ -176,7 +135,7 @@ export const createGuestAndAdminNotification = async (req, res) => {
 };
 
 /**
- * Get notifications for a specific guest
+ * Get notifications for a specific guest.
  */
 export const getGuestNotifications = async (req, res) => {
   try {
@@ -184,7 +143,6 @@ export const getGuestNotifications = async (req, res) => {
     if (!guest_id) {
       return res.status(400).json({ message: 'Guest ID is required' });
     }
-
     const { data, error } = await getNotificationsByGuest(guest_id);
     if (error) {
       return res.status(500).json({
@@ -192,11 +150,9 @@ export const getGuestNotifications = async (req, res) => {
         error: error.message
       });
     }
-
     if (!data || data.length === 0) {
       return res.status(404).json({ message: 'No notifications found for this guest' });
     }
-
     return res.status(200).json({
       message: 'Notifications retrieved successfully',
       notifications: data
@@ -208,7 +164,7 @@ export const getGuestNotifications = async (req, res) => {
 };
 
 /**
- * Get notifications for a specific admin
+ * Get notifications for a specific admin.
  */
 export const getAdminNotifications = async (req, res) => {
   try {
@@ -216,7 +172,6 @@ export const getAdminNotifications = async (req, res) => {
     if (!admin_id) {
       return res.status(400).json({ message: 'Admin ID is required' });
     }
-
     const { data, error } = await getNotificationsByAdmin(admin_id);
     if (error) {
       return res.status(500).json({
@@ -224,11 +179,9 @@ export const getAdminNotifications = async (req, res) => {
         error: error.message
       });
     }
-
     if (!data || data.length === 0) {
       return res.status(404).json({ message: 'No notifications found for this admin' });
     }
-
     return res.status(200).json({
       message: 'Admin notifications retrieved successfully',
       notifications: data
@@ -240,7 +193,7 @@ export const getAdminNotifications = async (req, res) => {
 };
 
 /**
- * Mark a single notification as read
+ * Mark a single notification as read.
  */
 export const markNotifRead = async (req, res) => {
   try {
@@ -248,7 +201,6 @@ export const markNotifRead = async (req, res) => {
     if (!id) {
       return res.status(400).json({ message: 'Notification ID is required' });
     }
-
     const { data, error } = await markNotificationAsRead(id);
     if (error) {
       return res.status(500).json({
@@ -259,7 +211,6 @@ export const markNotifRead = async (req, res) => {
     if (!data) {
       return res.status(404).json({ message: 'Notification not found' });
     }
-
     return res.status(200).json({
       message: 'Notification marked as read',
       data
@@ -271,7 +222,7 @@ export const markNotifRead = async (req, res) => {
 };
 
 /**
- * Mark ALL notifications for a specific admin as read
+ * Mark ALL notifications for a specific admin as read.
  */
 export const markAllAdminNotifsRead = async (req, res) => {
   try {
@@ -279,7 +230,6 @@ export const markAllAdminNotifsRead = async (req, res) => {
     if (!admin_id) {
       return res.status(400).json({ message: 'Admin ID is required' });
     }
-
     const { data, error } = await markAllNotificationsAsRead(admin_id);
     if (error) {
       return res.status(500).json({
@@ -287,7 +237,6 @@ export const markAllAdminNotifsRead = async (req, res) => {
         error: error.message
       });
     }
-
     return res.status(200).json({
       message: 'All notifications marked as read',
       data
@@ -299,7 +248,7 @@ export const markAllAdminNotifsRead = async (req, res) => {
 };
 
 /**
- * Mark ALL notifications for a specific guest as read
+ * Mark ALL notifications for a specific guest as read.
  */
 export const markAllGuestNotifsRead = async (req, res) => {
   try {
@@ -307,7 +256,6 @@ export const markAllGuestNotifsRead = async (req, res) => {
     if (!guest_id) {
       return res.status(400).json({ message: 'Guest ID is required' });
     }
-
     const { data, error } = await markAllNotificationsAsReadForGuest(guest_id);
     if (error) {
       return res.status(500).json({
@@ -315,7 +263,6 @@ export const markAllGuestNotifsRead = async (req, res) => {
         error: error.message
       });
     }
-
     return res.status(200).json({
       message: 'All notifications marked as read for guest',
       data
@@ -327,7 +274,7 @@ export const markAllGuestNotifsRead = async (req, res) => {
 };
 
 /**
- * Delete a notification (by ID)
+ * Delete a notification (by ID).
  */
 export const removeNotification = async (req, res) => {
   try {
@@ -335,7 +282,6 @@ export const removeNotification = async (req, res) => {
     if (!id) {
       return res.status(400).json({ message: 'Notification ID is required' });
     }
-
     const { data, error } = await deleteNotification(id);
     if (error) {
       return res.status(500).json({
@@ -346,7 +292,6 @@ export const removeNotification = async (req, res) => {
     if (!data) {
       return res.status(404).json({ message: 'Notification not found' });
     }
-
     return res.status(200).json({
       message: 'Notification deleted successfully',
       data
@@ -358,7 +303,7 @@ export const removeNotification = async (req, res) => {
 };
 
 /**
- * Clear (delete) ALL notifications for a specific admin
+ * Clear (delete) ALL notifications for a specific admin.
  */
 export const clearAllAdminNotifs = async (req, res) => {
   try {
@@ -366,7 +311,6 @@ export const clearAllAdminNotifs = async (req, res) => {
     if (!admin_id) {
       return res.status(400).json({ message: 'Admin ID is required' });
     }
-
     const { data, error } = await deleteAllNotificationsForAdmin(admin_id);
     if (error) {
       return res.status(500).json({
@@ -374,7 +318,6 @@ export const clearAllAdminNotifs = async (req, res) => {
         error: error.message
       });
     }
-
     return res.status(200).json({
       message: 'All notifications cleared successfully',
       data
@@ -386,7 +329,7 @@ export const clearAllAdminNotifs = async (req, res) => {
 };
 
 /**
- * Clear (delete) ALL notifications for a specific guest
+ * Clear (delete) ALL notifications for a specific guest.
  */
 export const clearAllGuestNotifs = async (req, res) => {
   try {
@@ -394,7 +337,6 @@ export const clearAllGuestNotifs = async (req, res) => {
     if (!guest_id) {
       return res.status(400).json({ message: 'Guest ID is required' });
     }
-
     const { data, error } = await deleteAllNotificationsForGuest(guest_id);
     if (error) {
       return res.status(500).json({
@@ -402,7 +344,6 @@ export const clearAllGuestNotifs = async (req, res) => {
         error: error.message
       });
     }
-
     return res.status(200).json({
       message: 'All notifications cleared for guest',
       data

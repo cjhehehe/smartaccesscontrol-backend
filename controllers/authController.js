@@ -37,7 +37,7 @@ export const loginAdmin = async (req, res) => {
       return res.status(401).json({ message: 'Invalid credentials.' });
     }
 
-    // Generate JWT token. (Note: The token's internal expiry is based on the UTC time)
+    // Generate JWT token. (Token expiry based on UTC)
     const token = jwt.sign(
       { id: admin.id, role: admin.role },
       process.env.JWT_SECRET,
@@ -51,3 +51,5 @@ export const loginAdmin = async (req, res) => {
     return res.status(500).json({ message: 'Internal server error.' });
   }
 };
+
+// (Additional auth functions can be added here if needed)

@@ -44,7 +44,7 @@ export const createAdmin = async (req, res) => {
           password: hashedPassword,
           email,
           role,
-          created_at: new Date().toISOString(), // store UTC timestamp
+          created_at: new Date().toISOString(),
         },
       ])
       .select()
@@ -79,14 +79,12 @@ export const loginAdmin = async (req, res) => {
 
     console.log("Attempting login with:", identifier);
 
-    // Attempt to find the admin by username OR email
     const { data: admin, error } = await supabase
       .from('admins')
       .select('id, username, password, email, role')
       .or(`username.eq.${identifier},email.eq.${identifier}`)
       .maybeSingle();
 
-    // If not found or any error
     if (error || !admin) {
       console.log("Admin not found:", identifier);
       return res.status(401).json({ message: 'Invalid credentials' });
@@ -94,7 +92,6 @@ export const loginAdmin = async (req, res) => {
 
     console.log("Retrieved Admin Data:", admin);
 
-    // Compare hashed password
     const isPasswordValid = await bcrypt.compare(password, admin.password);
     console.log("Password Match Result:", isPasswordValid);
     if (!isPasswordValid) {
@@ -105,7 +102,6 @@ export const loginAdmin = async (req, res) => {
     // Remove the password field before sending back
     const { password: _, ...publicAdmin } = admin;
 
-    // Generate a JWT token
     const token = jwt.sign(
       { id: admin.id, role: admin.role },
       process.env.JWT_SECRET,
@@ -116,7 +112,7 @@ export const loginAdmin = async (req, res) => {
     return res.status(200).json({
       message: 'Admin logged in successfully',
       token,
-      admin: publicAdmin  // <-- Provide the admin object to the frontend
+      admin: publicAdmin
     });
   } catch (error) {
     console.error('Unexpected Login Error:', error);
@@ -136,7 +132,6 @@ export const changeAdminPassword = async (req, res) => {
         .json({ message: 'All fields are required (adminId, currentPassword, newPassword).' });
     }
 
-    // Fetch admin by ID
     const { data: admin, error } = await supabase
       .from('admins')
       .select('id, password')
@@ -147,16 +142,13 @@ export const changeAdminPassword = async (req, res) => {
       return res.status(404).json({ message: 'Admin not found.' });
     }
 
-    // Check current password
     const isMatch = await bcrypt.compare(currentPassword, admin.password);
     if (!isMatch) {
       return res.status(401).json({ message: 'Incorrect current password.' });
     }
 
-    // Hash the new password
     const hashedPassword = await bcrypt.hash(newPassword, 10);
 
-    // Update in DB
     const { error: updateError } = await supabase
       .from('admins')
       .update({ password: hashedPassword })
