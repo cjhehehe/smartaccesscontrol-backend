@@ -8,6 +8,7 @@ import {
   uploadAdminAvatar,
   signOutAdmin,
   getAllAdminsController,
+  updateAdminFcmToken,
 } from '../controllers/adminController.js';
 
 const router = express.Router();
@@ -29,6 +30,9 @@ router.post('/upload_avatar', uploadAdminAvatar);
 
 // POST /api/admins/sign_out
 router.post('/sign_out', signOutAdmin);
+
+// POST /api/admins/update-fcm-token
+router.post('/update-fcm-token', updateAdminFcmToken);
 
 // GET /api/admins
 router.get('/', getAllAdminsController);

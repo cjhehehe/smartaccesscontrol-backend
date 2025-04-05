@@ -241,6 +241,30 @@ export const uploadAdminAvatar = async (req, res) => {
 };
 
 /**
+ * Update Admin FCM Token
+ */
+export const updateAdminFcmToken = async (req, res) => {
+  try {
+    const { adminId, fcmToken } = req.body;
+    if (!adminId || !fcmToken) {
+      return res.status(400).json({ message: 'adminId and fcmToken are required.' });
+    }
+    const { data, error } = await supabase
+      .from('admins')
+      .update({ fcm_token: fcmToken })
+      .eq('id', adminId);
+    if (error || !data) {
+      console.error('[Admin] Error updating FCM token:', error);
+      return res.status(500).json({ message: 'Failed to update FCM token.' });
+    }
+    return res.status(200).json({ message: 'FCM token updated successfully.' });
+  } catch (err) {
+    console.error('[Admin] Exception updating FCM token:', err);
+    return res.status(500).json({ message: 'Internal server error.' });
+  }
+};
+
+/**
  * Sign Out Admin
  */
 export const signOutAdmin = async (req, res) => {
