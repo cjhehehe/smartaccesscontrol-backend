@@ -5,16 +5,18 @@ import dotenv from 'dotenv';
 dotenv.config();
 
 try {
-  const serviceAccountEnv = process.env.FIREBASE_SERVICE_KEY;
+  const raw = process.env.FIREBASE_SERVICE_KEY;
 
-  if (!serviceAccountEnv) {
-    throw new Error('FIREBASE_SERVICE_KEY environment variable is not set.');
+  if (!raw) throw new Error('FIREBASE_SERVICE_KEY environment variable is not set.');
+
+  // Parse and fix the private key
+  const parsed = JSON.parse(raw);
+  if (parsed.private_key) {
+    parsed.private_key = parsed.private_key.replace(/\\n/g, '\n');
   }
 
-  const serviceAccount = JSON.parse(serviceAccountEnv);
-
   admin.initializeApp({
-    credential: admin.credential.cert(serviceAccount),
+    credential: admin.credential.cert(parsed),
   });
 
   console.log('[Firebase] Admin initialized successfully.');
@@ -26,19 +28,14 @@ export const sendNotification = async (fcmToken, title, body, data = {}) => {
   try {
     const message = {
       token: fcmToken,
-      notification: {
-        title,
-        body,
-      },
+      notification: { title, body },
       android: {
         priority: 'high',
         notification: {
           sound: 'default',
         },
       },
-      data: {
-        ...data,
-      },
+      data: { ...data },
     };
 
     const response = await admin.messaging().send(message);
