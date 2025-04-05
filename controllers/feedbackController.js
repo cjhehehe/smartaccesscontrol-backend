@@ -138,8 +138,12 @@ export const getGuestFeedback = async (req, res) => {
       });
     }
 
+    // IMPORTANT FIX: Return 200 even if empty array
     if (!data || data.length === 0) {
-      return res.status(404).json({ message: 'No feedback found for this guest' });
+      return res.status(200).json({
+        message: 'No feedback found for this guest',
+        data: [],
+      });
     }
 
     return res.status(200).json({
