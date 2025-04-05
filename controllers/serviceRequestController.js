@@ -154,6 +154,7 @@ export const updateServiceRequestStatus = async (req, res) => {
     if (isNaN(reqIdNum)) {
       return res.status(400).json({ message: 'Invalid request_id format.' });
     }
+
     // 1) Update the service request row
     const { data: updatedData, error: updateError } = await supabase
       .from('service_requests')
@@ -171,6 +172,7 @@ export const updateServiceRequestStatus = async (req, res) => {
         created_at
       `)
       .single();
+
     if (updateError) {
       console.error('[updateServiceRequestStatus] Error updating service request status:', updateError);
       return res.status(500).json({
@@ -181,6 +183,7 @@ export const updateServiceRequestStatus = async (req, res) => {
     if (!updatedData) {
       return res.status(404).json({ message: 'Service request not found.' });
     }
+
     // 2) Log the status change event
     try {
       const {
@@ -189,10 +192,12 @@ export const updateServiceRequestStatus = async (req, res) => {
         service_type: stype,
         status: newStatus
       } = updatedData;
+
       let statusLabel = 'Pending';
       if (newStatus === 'in_progress') statusLabel = 'In Progress';
       else if (newStatus === 'completed') statusLabel = 'Completed';
       else if (newStatus === 'canceled') statusLabel = 'Canceled';
+
       const logMessage = `Status changed to ${statusLabel}.`;
       const { error: logError } = await createRequestLog({
         request_id: updatedRequestId,
@@ -206,17 +211,22 @@ export const updateServiceRequestStatus = async (req, res) => {
     } catch (logCatchErr) {
       console.error('[updateServiceRequestStatus] Unexpected error logging status change:', logCatchErr);
     }
+
     // 3) Notify the guest about the status update
     try {
       const guestId = updatedData.guest_id;
       const serviceType = updatedData.service_type || 'service request';
       const newStatus = updatedData.status;
+
       let statusLabel = 'Pending';
       if (newStatus === 'in_progress') statusLabel = 'In Progress';
       else if (newStatus === 'completed') statusLabel = 'Completed';
       else if (newStatus === 'canceled') statusLabel = 'Canceled';
+
       const notifTitle = 'Service Request Updated';
       const notifMessage = `Your ${serviceType} request is now ${statusLabel}.`;
+
+      // (a) Create a DB notification record for the guest
       const { error: notifError } = await createNotification({
         recipient_guest_id: guestId,
         title: notifTitle,
@@ -227,9 +237,29 @@ export const updateServiceRequestStatus = async (req, res) => {
       if (notifError) {
         console.error('[updateServiceRequestStatus] Failed to create guest notification:', notifError);
       }
+
+      // (b) Fetch the guest's FCM token
+      const { data: guestRecord, error: guestErr } = await supabase
+        .from('guests')
+        .select('fcm_token')
+        .eq('id', guestId)
+        .maybeSingle();
+      if (guestErr) {
+        console.error('[updateServiceRequestStatus] Error fetching guest fcm_token:', guestErr);
+      } else if (guestRecord && guestRecord.fcm_token) {
+        // (c) Send push notification to the guest’s device
+        await sendNotification(
+          guestRecord.fcm_token,
+          notifTitle,
+          notifMessage,
+          { requestId: updatedData.id.toString() }
+        );
+        console.log(`[updateServiceRequestStatus] Guest #${guestId} notified via FCM.`);
+      }
     } catch (notifCatchErr) {
       console.error('[updateServiceRequestStatus] Unexpected error notifying guest about status change:', notifCatchErr);
     }
+
     return res.status(200).json({
       message: `Service request #${request_id} status updated to ${status}.`,
       data: updatedData
