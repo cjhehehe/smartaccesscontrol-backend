@@ -63,7 +63,7 @@ async function sendTenMinWarning(room) {
   console.log(`[cronJobs] Sent 10-min warning for room #${room.room_number}`);
 }
 
-// 4) Helper: Find the open occupant record in room_occupancy_history
+// 4) Helper: find the open occupant record in room_occupancy_history
 async function findOpenOccupancyRecord(guestId, roomId) {
   try {
     const { data, error } = await supabase
@@ -110,55 +110,54 @@ async function checkOutOccupancyHistory(occupancyId, reason = "Auto Check-Out") 
   }
 }
 
-// -------------- Cron Job: Auto-Checkout and Auto-Deactivation (Runs every 30 seconds) --------------
+// -------------- Cron Job: Auto-Checkout (Runs every 30 seconds) --------------
 // Cron pattern '*/30 * * * * *' means every 30 seconds.
 cron.schedule('*/30 * * * * *', async () => {
-  console.log('[cronJobs] Running auto-checkout and auto-deactivation job...');
+  console.log('[cronJobs] Running auto-checkout job...');
 
-  // ----------------- Room Auto-Checkout Logic -----------------
   try {
     const rooms = await getOccupiedRooms();
-    if (rooms.length) {
-      const now = new Date();
+    if (!rooms.length) return;
 
-      for (const room of rooms) {
-        const checkOutDate = parseCheckOutDate(room.check_out);
-        if (!checkOutDate) continue;
+    const now = new Date();
 
-        const timeDiff = checkOutDate - now;
+    for (const room of rooms) {
+      const checkOutDate = parseCheckOutDate(room.check_out);
+      if (!checkOutDate) continue;
 
-        // 1) Send 10-min warning if applicable
-        if (timeDiff > 0 && timeDiff <= 10 * 60 * 1000) {
-          if (!room.ten_min_warning_sent) {
-            await sendTenMinWarning(room);
-            const { error } = await supabase
-              .from('rooms')
-              .update({ ten_min_warning_sent: true })
-              .eq('id', room.id);
-            if (error) {
-              console.error('[cronJobs] Error updating ten_min_warning_sent:', error);
-            }
+      const timeDiff = checkOutDate - now;
+
+      // 1) 10-min warning
+      if (timeDiff > 0 && timeDiff <= 10 * 60 * 1000) {
+        if (!room.ten_min_warning_sent) {
+          await sendTenMinWarning(room);
+          const { error } = await supabase
+            .from('rooms')
+            .update({ ten_min_warning_sent: true })
+            .eq('id', room.id);
+          if (error) {
+            console.error('[cronJobs] Error updating ten_min_warning_sent:', error);
           }
         }
+      }
 
-        // 2) Auto-checkout if the check_out time has passed
-        if (now >= checkOutDate) {
-          // Step A: Check out the room in the "rooms" table
-          const result = await checkOutRoomById(room.id, 'Automatic Checkout');
-          if (result.success) {
-            console.log(`[cronJobs] Auto-checked out Room #${room.room_number}`);
+      // 2) Auto-checkout if time is up
+      if (now >= checkOutDate) {
+        // Step A: Check out the room in "rooms" table
+        const result = await checkOutRoomById(room.id, 'Automatic Checkout');
+        if (result.success) {
+          console.log(`[cronJobs] Auto-checked out Room #${room.room_number}`);
 
-            // Step B: Find the open occupant record in room_occupancy_history
-            const occupantRecord = await findOpenOccupancyRecord(room.guest_id, room.id);
-            if (occupantRecord) {
-              // Step C: Check out the occupant record (creates occupant check-out event)
-              await checkOutOccupancyHistory(occupantRecord.id, "Auto Check-Out");
-            } else {
-              console.log(`[cronJobs] No open occupant record found for guest_id=${room.guest_id} & room_id=${room.id}`);
-            }
+          // Step B: Find the open occupant record in room_occupancy_history
+          const occupantRecord = await findOpenOccupancyRecord(room.guest_id, room.id);
+          if (occupantRecord) {
+            // Step C: Check out that occupant record (creates occupant check-out event)
+            await checkOutOccupancyHistory(occupantRecord.id, "Auto Check-Out");
           } else {
-            console.error('[cronJobs] Error auto-checking out room ID:', room.id, result.error);
+            console.log(`[cronJobs] No open occupant record found for guest_id=${room.guest_id} & room_id=${room.id}`);
           }
+        } else {
+          console.error('[cronJobs] Error auto-checking out room ID:', room.id, result.error);
         }
       }
     }
@@ -166,12 +165,11 @@ cron.schedule('*/30 * * * * *', async () => {
     console.error('[cronJobs] Error in auto-checkout job:', err);
   }
 
-  // ----------------- Auto-Deactivation for MAC Addresses -----------------
+  // -------------- Pi Auto-Deactivate Endpoint --------------
   try {
-    console.log('[cronJobs] Triggering auto-deactivation for expired MACs...');
-    // NOTE: Remove the trailing `/api` from the default URL so that appending `/api/auto-deactivate-expired` works correctly.
-    const PI_GATEWAY_URL = process.env.PI_GATEWAY_URL || "https://pi-gateway.tail1e634e.ts.net";
-    const response = await fetch(`${PI_GATEWAY_URL}/api/auto-deactivate-expired`, {
+    console.log('[cronJobs] Triggering Pi auto-deactivate endpoint...');
+    const PI_GATEWAY_URL = process.env.PI_GATEWAY_URL || "https://pi-gateway.tail1e634e.ts.net/api";
+    const response = await fetch(`${PI_GATEWAY_URL}/auto-deactivate-expired`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -179,9 +177,9 @@ cron.schedule('*/30 * * * * *', async () => {
       },
       body: JSON.stringify({})
     });
-    const result = await response.json();
-    console.log('[cronJobs] Auto-deactivate MACs response:', result.message);
+    const data = await response.json();
+    console.log('[cronJobs] Pi auto-deactivate response:', data.message);
   } catch (err) {
-    console.error('[cronJobs] Error in auto-deactivation for MACs:', err.message || err);
+    console.error('[cronJobs] Error calling Pi auto-deactivate endpoint:', err);
   }
 });
