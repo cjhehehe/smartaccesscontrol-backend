@@ -17,7 +17,8 @@ export const findUserByEmail = async (email) => {
         membership_level,
         membership_start,
         membership_renewals,
-        avatar_url
+        avatar_url,
+        byte_size
       `)
       .eq('email', email)
       .maybeSingle();
@@ -48,7 +49,8 @@ export const findUserByPhone = async (phone) => {
         membership_level,
         membership_start,
         membership_renewals,
-        avatar_url
+        avatar_url,
+        byte_size
       `)
       .eq('phone', phone);
     if (error) {
@@ -78,7 +80,8 @@ export const findUserById = async (id) => {
         membership_level,
         membership_start,
         membership_renewals,
-        avatar_url
+        avatar_url,
+        byte_size
       `)
       .eq('id', id)
       .maybeSingle();
@@ -113,7 +116,8 @@ export const createUser = async (userData) => {
         membership_level,
         membership_start,
         membership_renewals,
-        avatar_url
+        avatar_url,
+        byte_size
       `)
       .single();
     if (error) {
@@ -145,7 +149,8 @@ export const updateUser = async (id, updateFields) => {
         membership_level,
         membership_start,
         membership_renewals,
-        avatar_url
+        avatar_url,
+        byte_size
       `)
       .maybeSingle();
     if (error) {
@@ -178,7 +183,6 @@ export const signOutUser = async (guestId) => {
  */
 export const searchUsersByQuery = async (query) => {
   try {
-    // Using .or() with iLike on name, email, or phone
     const { data, error } = await supabase
       .from('guests')
       .select(`
@@ -189,7 +193,8 @@ export const searchUsersByQuery = async (query) => {
         membership_level,
         membership_start,
         membership_renewals,
-        avatar_url
+        avatar_url,
+        byte_size
       `)
       .or(`name.ilike.%${query}%,email.ilike.%${query}%,phone.ilike.%${query}%`);
 
@@ -209,7 +214,9 @@ export const searchUsersByQuery = async (query) => {
  */
 export const getAllUsers = async () => {
   try {
-    const { data, error } = await supabase.from('guests').select('*');
+    const { data, error } = await supabase
+      .from('guests')
+      .select('*');
     if (error) {
       console.error('[UserModel] Error fetching all guests:', error);
       return { data: null, error };

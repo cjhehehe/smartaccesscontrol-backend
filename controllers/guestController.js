@@ -30,7 +30,7 @@ function fixId(obj) {
  */
 export const registerGuest = async (req, res) => {
   try {
-    const { name, email, phone, password, membershipLevel } = req.body;
+    const { name, email, phone, password, membershipLevel, byte_size } = req.body;
     if (!name || !email || !phone || !password) {
       return res.status(400).json({
         message: 'Name, email, phone, and password are required.',
@@ -63,6 +63,19 @@ export const registerGuest = async (req, res) => {
 
     const hashedPassword = await bcrypt.hash(password, 10);
 
+    // Compute byte_size if not provided by client
+    let finalByteSize = byte_size;
+    if (!finalByteSize) {
+      const guestDataForByteSize = {
+        id: 0, // Dummy value since ID is auto-generated
+        name,
+        email,
+        phone,
+        password: hashedPassword,
+      };
+      finalByteSize = Buffer.byteLength(JSON.stringify(guestDataForByteSize), 'utf8');
+    }
+
     const newUser = {
       name,
       email,
@@ -72,6 +85,7 @@ export const registerGuest = async (req, res) => {
       membership_start: new Date().toISOString(),
       membership_renewals: 0,
       avatar_url: null,
+      byte_size: finalByteSize,
     };
 
     console.log('[Guest] Registering new guest:', newUser);
