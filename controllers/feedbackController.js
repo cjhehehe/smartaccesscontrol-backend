@@ -95,7 +95,8 @@ export const submitGuestFeedback = async (req, res) => {
                 { 
                   userType: 'admin',
                   notification_type: 'feedback',
-                  feedbackId: feedbackData.id.toString()
+                  feedbackId: feedbackData.id.toString(),
+                  adminId: adminId.toString() // <-- Added adminId to payload
                 }
               );
             } catch (pushErr) {
@@ -226,7 +227,7 @@ export const replyToFeedbackComplaint = async (req, res) => {
               userType: 'guest',
               notification_type: 'feedback',
               feedbackId: id.toString(),
-              guestId: guest_id.toString() // <-- Added to ensure correct guest ID is passed
+              guestId: guest_id.toString() // Ensure correct guest ID is passed
             }
           );
         } catch (pushErr) {
