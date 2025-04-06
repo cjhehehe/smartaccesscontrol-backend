@@ -15,7 +15,7 @@ export const submitServiceRequest = async (req, res) => {
     // Expect delay_minutes (number) from the client
     const { guest_id, guest_name, service_type, description, delay_minutes } = req.body;
 
-    // Validate required fields (delay_minutes must be a positive number)
+    // Validate required fields
     if (!guest_id || !guest_name || !service_type || !description || delay_minutes == null) {
       return res.status(400).json({
         message: 'All fields are required: guest_id, guest_name, service_type, description, delay_minutes'
@@ -74,7 +74,7 @@ export const submitServiceRequest = async (req, res) => {
     }
     const newRequestId = data.id;
 
-    // 5) Log the "request_created" event (excluding request_size)
+    // 5) Log the "request_created" event
     if (newRequestId) {
       const logType = 'request_created';
       const logMessage = `Guest #${guest_id} created a ${service_type} request with a delay of ${delay_minutes} minutes.`;
@@ -103,17 +103,19 @@ export const submitServiceRequest = async (req, res) => {
           const adminId = admin.id;
           const notifTitle = 'New Service Request';
           const notifMessage = `Guest #${guest_id} submitted a ${service_type} request with a delay of ${delay_minutes} minutes.`;
+
           // Create notification record in the database
           const { error: notifError } = await createNotification({
             recipient_admin_id: adminId,
             title: notifTitle,
             message: notifMessage,
-            notification_type: 'service_request',
+            notification_type: 'service_request', // Mark it as service_request
             created_at: new Date().toISOString()
           });
           if (notifError) {
             console.error(`[submitServiceRequest] Failed to create notification for admin ${adminId}:`, notifError);
           }
+
           // Send push notification using FCM (if fcm_token exists)
           if (admin.fcm_token) {
             try {
@@ -121,7 +123,12 @@ export const submitServiceRequest = async (req, res) => {
                 admin.fcm_token,
                 notifTitle,
                 notifMessage,
-                { requestId: newRequestId.toString() }
+                {
+                  userType: 'admin',
+                  notification_type: 'service_request', // This is crucial
+                  requestId: newRequestId.toString(),
+                  adminId: adminId.toString()
+                }
               );
             } catch (pushErr) {
               console.error(`[submitServiceRequest] Push notification failed for admin ${adminId}:`, pushErr);
@@ -248,8 +255,6 @@ export const updateServiceRequestStatus = async (req, res) => {
         console.error('[updateServiceRequestStatus] Error fetching guest fcm_token:', guestErr);
       } else if (guestRecord && guestRecord.fcm_token) {
         // (c) Send push notification to the guest’s device.
-        // The payload now includes extra fields so the guest app knows to redirect
-        // to room_service_page.dart (via initialTab set to '1').
         await sendNotification(
           guestRecord.fcm_token,
           notifTitle,
