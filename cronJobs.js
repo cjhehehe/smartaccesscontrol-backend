@@ -169,7 +169,8 @@ cron.schedule('*/30 * * * * *', async () => {
   // ----------------- Auto-Deactivation for MAC Addresses -----------------
   try {
     console.log('[cronJobs] Triggering auto-deactivation for expired MACs...');
-    const PI_GATEWAY_URL = process.env.PI_GATEWAY_URL || "https://pi-gateway.tail1e634e.ts.net/api";
+    // NOTE: Remove the trailing `/api` from the default URL so that appending `/api/auto-deactivate-expired` works correctly.
+    const PI_GATEWAY_URL = process.env.PI_GATEWAY_URL || "https://pi-gateway.tail1e634e.ts.net";
     const response = await fetch(`${PI_GATEWAY_URL}/api/auto-deactivate-expired`, {
       method: 'POST',
       headers: {
