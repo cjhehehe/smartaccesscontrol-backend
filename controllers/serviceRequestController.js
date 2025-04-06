@@ -5,17 +5,13 @@ import {
   getServiceRequestsByGuest
 } from '../models/serviceRequestModel.js';
 import { createNotification } from '../models/notificationModel.js';
-// Log request event in request logs
 import { createRequestLog } from '../models/requestLogsModel.js';
-// Import our FCM service to send push notifications
 import { sendNotification } from '../services/fcmService.js';
 
 export const submitServiceRequest = async (req, res) => {
   try {
-    // Expect delay_minutes (number) from the client
     const { guest_id, guest_name, service_type, description, delay_minutes } = req.body;
 
-    // Validate required fields
     if (!guest_id || !guest_name || !service_type || !description || delay_minutes == null) {
       return res.status(400).json({
         message: 'All fields are required: guest_id, guest_name, service_type, description, delay_minutes'
@@ -27,7 +23,7 @@ export const submitServiceRequest = async (req, res) => {
       });
     }
 
-    // 1) Verify that the guest exists
+    // 1) Verify guest
     const { data: guest, error: guestError } = await supabase
       .from('guests')
       .select('id')
@@ -42,10 +38,9 @@ export const submitServiceRequest = async (req, res) => {
       return res.status(404).json({ message: 'Guest not found' });
     }
 
-    // 2) Build the payload
+    // 2) Build payload
     const now = new Date();
-    const nowUtc = now.toISOString(); // current UTC timestamp
-    // Calculate preferred_time by adding delay_minutes to now
+    const nowUtc = now.toISOString();
     const preferredTime = new Date(now.getTime() + delay_minutes * 60000).toISOString();
 
     const requestPayload = {
@@ -59,11 +54,11 @@ export const submitServiceRequest = async (req, res) => {
       created_at: nowUtc
     };
 
-    // 3) Calculate JSON payload size (in bytes)
+    // 3) Calculate JSON payload size
     const requestSize = Buffer.byteLength(JSON.stringify(requestPayload), 'utf8');
     requestPayload.request_size = requestSize;
 
-    // 4) Insert the new service request
+    // 4) Insert service request
     const { data, error } = await createServiceRequest(requestPayload);
     if (error) {
       console.error('[submitServiceRequest] Database error:', error);
@@ -74,7 +69,7 @@ export const submitServiceRequest = async (req, res) => {
     }
     const newRequestId = data.id;
 
-    // 5) Log the "request_created" event
+    // 5) Log "request_created"
     if (newRequestId) {
       const logType = 'request_created';
       const logMessage = `Guest #${guest_id} created a ${service_type} request with a delay of ${delay_minutes} minutes.`;
@@ -89,13 +84,13 @@ export const submitServiceRequest = async (req, res) => {
       }
     }
 
-    // 6) Notify all admins about the new request:
+    // 6) Notify all admins
     try {
-      // Query admins with non-null fcm_token
       const { data: adminList, error: adminsError } = await supabase
         .from('admins')
         .select('id, fcm_token')
         .neq('fcm_token', null);
+
       if (adminsError) {
         console.error('[submitServiceRequest] Error fetching admins for push notification:', adminsError);
       } else if (adminList && adminList.length > 0) {
@@ -104,19 +99,19 @@ export const submitServiceRequest = async (req, res) => {
           const notifTitle = 'New Service Request';
           const notifMessage = `Guest #${guest_id} submitted a ${service_type} request with a delay of ${delay_minutes} minutes.`;
 
-          // Create notification record in the database
+          // Create notification record in DB
           const { error: notifError } = await createNotification({
             recipient_admin_id: adminId,
             title: notifTitle,
             message: notifMessage,
-            notification_type: 'service_request', // Mark it as service_request
+            notification_type: 'service_request', // in DB we store it as 'service_request'
             created_at: new Date().toISOString()
           });
           if (notifError) {
             console.error(`[submitServiceRequest] Failed to create notification for admin ${adminId}:`, notifError);
           }
 
-          // Send push notification using FCM (if fcm_token exists)
+          // [FIX] Pass notification_type = "service" to the push payload
           if (admin.fcm_token) {
             try {
               await sendNotification(
@@ -124,10 +119,9 @@ export const submitServiceRequest = async (req, res) => {
                 notifTitle,
                 notifMessage,
                 {
-                  userType: 'admin',
-                  notification_type: 'service_request', // This is crucial
                   requestId: newRequestId.toString(),
-                  adminId: adminId.toString()
+                  userType: 'admin',
+                  notification_type: 'service' // <-- So the app knows this is a service request
                 }
               );
             } catch (pushErr) {
@@ -162,7 +156,6 @@ export const updateServiceRequestStatus = async (req, res) => {
       return res.status(400).json({ message: 'Invalid request_id format.' });
     }
 
-    // 1) Update the service request row
     const { data: updatedData, error: updateError } = await supabase
       .from('service_requests')
       .update({ status })
@@ -191,7 +184,7 @@ export const updateServiceRequestStatus = async (req, res) => {
       return res.status(404).json({ message: 'Service request not found.' });
     }
 
-    // 2) Log the status change event
+    // 2) Log the status change
     try {
       const {
         id: updatedRequestId,
@@ -219,7 +212,7 @@ export const updateServiceRequestStatus = async (req, res) => {
       console.error('[updateServiceRequestStatus] Unexpected error logging status change:', logCatchErr);
     }
 
-    // 3) Notify the guest about the status update
+    // 3) Notify the guest
     try {
       const guestId = updatedData.guest_id;
       const serviceType = updatedData.service_type || 'service request';
@@ -233,7 +226,7 @@ export const updateServiceRequestStatus = async (req, res) => {
       const notifTitle = 'Service Request Updated';
       const notifMessage = `Your ${serviceType} request is now ${statusLabel}.`;
 
-      // (a) Create a DB notification record for the guest
+      // (a) Create DB notification
       const { error: notifError } = await createNotification({
         recipient_guest_id: guestId,
         title: notifTitle,
@@ -251,10 +244,11 @@ export const updateServiceRequestStatus = async (req, res) => {
         .select('fcm_token')
         .eq('id', guestId)
         .maybeSingle();
+
       if (guestErr) {
         console.error('[updateServiceRequestStatus] Error fetching guest fcm_token:', guestErr);
       } else if (guestRecord && guestRecord.fcm_token) {
-        // (c) Send push notification to the guest’s device.
+        // (c) Send push notification
         await sendNotification(
           guestRecord.fcm_token,
           notifTitle,
