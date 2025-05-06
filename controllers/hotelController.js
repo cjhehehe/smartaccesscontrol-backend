@@ -1,20 +1,26 @@
 // controllers/hotelController.js
 import { findRoomByNumber, updateRoomByNumber } from '../models/roomsModel.js';
-import { getAvailableRFIDs, assignRFIDToGuest, findRFIDByUID, getAllRFIDs } from '../models/rfidModel.js';
-import { createHistoryRecord, getAllHistoryRecords } from '../models/roomOccupancyHistoryModel.js';
-// Import a helper to fetch guest data so we can populate occupant_snapshot
-import { findUserById } from '../models/userModel.js'; // Adjust path as needed
+import {
+  getAvailableRFIDs,
+  assignRFIDToGuest,
+  findRFIDByUID,
+  getAllRFIDs
+} from '../models/rfidModel.js';
+import {
+  createHistoryRecord,
+  getAllHistoryRecords
+} from '../models/roomOccupancyHistoryModel.js';
+import { findUserById } from '../models/userModel.js'; // for occupant_snapshot
 
 /**
- * Helper function to assign a room by number.
+ * Helper to assign a room by its number.
  */
 const assignRoomByNumberModel = async (room_number, guest_id, hours_stay) => {
-  const numericHoursStay = parseFloat(hours_stay);
-  if (isNaN(numericHoursStay) || numericHoursStay <= 0) {
+  const numericHours = parseFloat(hours_stay);
+  if (isNaN(numericHours) || numericHours <= 0) {
     return { data: null, error: new Error("Invalid hours_stay") };
   }
 
-  // Find the room by its number
   const { data: room, error: findError } = await findRoomByNumber(room_number);
   if (findError) return { data: null, error: findError };
   if (!room) return { data: null, error: new Error(`Room ${room_number} not found`) };
@@ -22,14 +28,13 @@ const assignRoomByNumberModel = async (room_number, guest_id, hours_stay) => {
     return { data: null, error: new Error(`Room ${room_number} is not available`) };
   }
 
-  // Update the room to reserve it
+  // reserve it
   const updateFields = {
     guest_id,
-    hours_stay: numericHoursStay,
+    hours_stay: numericHours,
     status: 'reserved',
     registration_time: new Date().toISOString(),
   };
-
   const { data, error } = await updateRoomByNumber(
     room_number,
     updateFields,
@@ -40,23 +45,44 @@ const assignRoomByNumberModel = async (room_number, guest_id, hours_stay) => {
 
 /**
  * POST /api/hotel/register-flow
- * Unified endpoint to register a guest:
- *  - Checks for an existing open occupancy record.
- *  - Assigns the room.
- *  - Retrieves available RFIDs and assigns one.
- *  - Creates the occupancy record with event_indicator set to "registered".
+ * Now requires check_in & check_out instead of hours_stay.
  */
 export const registerFlow = async (req, res) => {
   try {
-    const { guest_id, room_number, hours_stay, rfid_id } = req.body;
-    if (!guest_id || !room_number || !hours_stay || !rfid_id) {
-      return res.status(400).json({ 
-        success: false, 
-        message: "Missing required fields: guest_id, room_number, hours_stay, rfid_id" 
+    const {
+      guest_id,
+      room_number,
+      check_in,
+      check_out,
+      rfid_id
+    } = req.body;
+
+    // require the timestamps plus everything else
+    if (
+      !guest_id ||
+      !room_number ||
+      !check_in ||
+      !check_out ||
+      !rfid_id
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: "Missing required fields: guest_id, room_number, check_in, check_out, rfid_id"
       });
     }
 
-    // 0. Check if an open occupancy record already exists for this guest.
+    // parse and compute hours_stay
+    const inDate  = new Date(check_in);
+    const outDate = new Date(check_out);
+    if (isNaN(inDate) || isNaN(outDate) || outDate <= inDate) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid check_in/check_out range"
+      });
+    }
+    const hours_stay = (outDate - inDate) / (1000 * 60 * 60);
+
+    // 0) see if they already have an open occupancy
     const { data: existingRecords, error: recordsError } = await getAllHistoryRecords();
     if (recordsError) {
       return res.status(500).json({
@@ -66,12 +92,12 @@ export const registerFlow = async (req, res) => {
       });
     }
     const existingRecord = existingRecords?.find(
-      (record) => record.guest_id === guest_id && record.check_out === null
+      r => r.guest_id === guest_id && r.check_out === null
     );
     if (existingRecord) {
       return res.status(200).json({
         success: true,
-        message: "Occupancy record already exists for this guest and room.",
+        message: "Occupancy record already exists for this guest.",
         data: {
           roomId: existingRecord.room_id,
           occupancyRecordId: existingRecord.id,
@@ -80,11 +106,9 @@ export const registerFlow = async (req, res) => {
       });
     }
 
-    // 1. Assign the room.
+    // 1) reserve the room
     const { data: roomData, error: roomError } = await assignRoomByNumberModel(
-      room_number,
-      guest_id,
-      hours_stay
+      room_number, guest_id, hours_stay
     );
     if (roomError || !roomData) {
       return res.status(500).json({
@@ -95,30 +119,24 @@ export const registerFlow = async (req, res) => {
     }
     const realRoomId = roomData.id;
 
-    // 2. Retrieve available RFIDs and match rfid_id.
-    const { data: availableRFIDs, error: rfidFetchError } = await getAvailableRFIDs();
+    // 2) pick up the RFID UID
     let rfidUid;
-    if (!rfidFetchError && availableRFIDs && availableRFIDs.length > 0) {
-      for (const item of availableRFIDs) {
-        if (item.id === rfid_id) {
-          rfidUid = item.rfid_uid;
-          break;
-        }
-      }
+    const { data: availableRFIDs, error: rfidFetchError } = await getAvailableRFIDs();
+    if (!rfidFetchError && availableRFIDs) {
+      const found = availableRFIDs.find(item => item.id === rfid_id);
+      if (found) rfidUid = found.rfid_uid;
     }
     if (!rfidUid) {
-      const { data: allRFIDs, error: allRFIDsError } = await getAllRFIDs();
-      if (allRFIDsError || !allRFIDs) {
+      const { data: allRFIDs, error: allErr } = await getAllRFIDs();
+      if (allErr || !allRFIDs) {
         return res.status(500).json({
           success: false,
           message: "Failed to fetch all RFIDs for fallback",
-          error: allRFIDsError?.message || allRFIDsError,
+          error: allErr?.message || allErr,
         });
       }
-      const foundRFID = allRFIDs.find((item) => item.id === rfid_id);
-      if (foundRFID) {
-        rfidUid = foundRFID.rfid_uid;
-      }
+      const found = allRFIDs.find(item => item.id === rfid_id);
+      if (found) rfidUid = found.rfid_uid;
     }
     if (!rfidUid) {
       return res.status(400).json({
@@ -127,7 +145,7 @@ export const registerFlow = async (req, res) => {
       });
     }
 
-    // 3. Check the RFID record; assign if available.
+    // 3) assign it if still available
     const { data: rfidRecord, error: rfidRecordError } = await findRFIDByUID(rfidUid);
     if (rfidRecordError || !rfidRecord) {
       return res.status(500).json({
@@ -137,30 +155,25 @@ export const registerFlow = async (req, res) => {
       });
     }
     if (rfidRecord.status === 'available') {
-      const { data: assignedRFID, error: assignRFIDError } = await assignRFIDToGuest(
-        rfidUid,
-        guest_id
-      );
-      if (assignRFIDError || !assignedRFID) {
+      const { error: assignErr } = await assignRFIDToGuest(rfidUid, guest_id);
+      if (assignErr) {
         return res.status(500).json({
           success: false,
           message: "Failed to assign RFID",
-          error: assignRFIDError?.message || assignRFIDError,
+          error: assignErr.message || assignErr,
         });
       }
     }
 
-    // 4. Prepare occupant_snapshot from guest data (exclude password).
+    // 4) snapshot the guest
     let occupantSnapshot = {};
     const { data: guestData, error: guestErr } = await findUserById(guest_id);
-    if (guestErr) {
-      console.error("Failed to fetch guest data for occupant_snapshot:", guestErr);
-    } else if (guestData) {
-      const { password, ...safeGuestData } = guestData;
-      occupantSnapshot = safeGuestData;
+    if (!guestErr && guestData) {
+      const { password, ...safe } = guestData;
+      occupantSnapshot = safe;
     }
 
-    // 5. Create the occupancy record with event_indicator set to "registered".
+    // 5) write the occupancy record
     const occupancyData = {
       room_id: realRoomId,
       guest_id,
@@ -168,21 +181,20 @@ export const registerFlow = async (req, res) => {
       registration_time: new Date().toISOString(),
       check_in: null,
       check_out: null,
-      hours_stay,
+      hours_stay,               // computed
       check_out_reason: null,
       was_early_checkout: false,
       occupant_snapshot: occupantSnapshot,
       mac_addresses_snapshot: {},
       event_indicator: "registered"
     };
-
-    const { data: occupancyRecord, error: occupancyError } = await createHistoryRecord(occupancyData);
-    if (occupancyError || !occupancyRecord) {
-      console.error("Supabase insert error:", occupancyError);
+    const { data: occupancyRecord, error: occErr } = await createHistoryRecord(occupancyData);
+    if (occErr || !occupancyRecord) {
+      console.error("Supabase insert error:", occErr);
       return res.status(500).json({
         success: false,
         message: "Failed to create occupancy record",
-        error: occupancyError?.message || occupancyError,
+        error: occErr?.message || occErr,
       });
     }
 
@@ -195,6 +207,7 @@ export const registerFlow = async (req, res) => {
         assignedRFID: { id: rfid_id, rfid_uid: rfidUid },
       },
     });
+
   } catch (e) {
     console.error("registerFlow Error:", e);
     return res.status(500).json({
