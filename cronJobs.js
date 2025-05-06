@@ -5,7 +5,8 @@ import supabase from './config/supabase.js';
 import { createNotification } from './models/notificationModel.js';
 import { checkOutRoomById } from './models/roomsModel.js';
 
-const BACKEND_BASE_URL = "https://smartaccesscontrol-backend-production.up.railway.app/api";
+const BACKEND_BASE_URL =
+  "https://smartaccesscontrol-backend-production.up.railway.app/api";
 
 // —————————————————————————————————————————————————————————————————————————————
 // AUTO-CHECKOUT LOGIC (every 30s)
@@ -82,46 +83,52 @@ async function checkOutOccupancyHistory(occupancyId, reason = "Auto Check-Out") 
     const body = {
       check_out: new Date().toISOString(),
       check_out_reason: reason,
-      was_early_checkout: false
+      was_early_checkout: false,
     };
     const res = await fetch(url, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body)
+      body: JSON.stringify(body),
     });
     if (res.ok) {
       const payload = await res.json();
-      console.log(`[cronJobs] Occupancy ID=${occupancyId} checked out: ${payload.message}`);
+      console.log(
+        `[cronJobs] Occupancy ID=${occupancyId} checked out: ${payload.message}`
+      );
     } else {
-      console.error(`[cronJobs] Failed occupancy checkout ID=${occupancyId}, HTTP ${res.status}`);
+      console.error(
+        `[cronJobs] Failed occupancy checkout ID=${occupancyId}, HTTP ${res.status}`
+      );
     }
   } catch (err) {
     console.error('[cronJobs] checkOutOccupancyHistory error:', err);
   }
 }
 
-// Auto-checkout job
+// -------------- Cron Job: Auto-Checkout (Runs every 30 seconds) --------------
 cron.schedule('*/30 * * * * *', async () => {
   console.log('[cronJobs] Running auto-checkout job...');
   try {
     const rooms = await getOccupiedRooms();
-    const now   = new Date();
+    const now = new Date();
+
     for (const r of rooms) {
       const coDate = parseCheckOutDate(r.check_out);
       if (!coDate) continue;
       const diff = coDate - now;
 
-      // 10-min warning
+      // → 10-min warning
       if (diff > 0 && diff <= 10 * 60 * 1000 && !r.ten_min_warning_sent) {
         await sendTenMinWarning(r);
         const { error } = await supabase
           .from('rooms')
           .update({ ten_min_warning_sent: true })
           .eq('id', r.id);
-        if (error) console.error('[cronJobs] Error flagging ten_min_warning_sent:', error);
+        if (error)
+          console.error('[cronJobs] Error flagging ten_min_warning_sent:', error);
       }
 
-      // time's up → auto-checkout
+      // → Auto-checkout
       if (now >= coDate) {
         const res = await checkOutRoomById(r.id, 'Automatic Checkout');
         if (res.success) {
@@ -137,73 +144,81 @@ cron.schedule('*/30 * * * * *', async () => {
     console.error('[cronJobs] Error in auto-checkout job:', err);
   }
 
-  // Pi auto-deactivate
+  // → Pi Auto-Deactivate (only if configured)
+  const PI_URL = process.env.PI_GATEWAY_URL;
+  const API_KEY = process.env.PUBLIC_API_KEY;
+  if (!PI_URL || !API_KEY) {
+    console.log(
+      '[cronJobs] Skipping Pi auto-deactivate: PI_GATEWAY_URL or PUBLIC_API_KEY not set.'
+    );
+    return;
+  }
+
   try {
     console.log('[cronJobs] Triggering Pi auto-deactivate…');
-    const PI_URL = process.env.PI_GATEWAY_URL
-      || "https://pi-gateway.tail1e634e.ts.net/api";
     const resp = await fetch(`${PI_URL}/auto-deactivate-expired`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'x-api-key': process.env.PUBLIC_API_KEY,
+        'x-api-key': API_KEY,
       },
-      body: JSON.stringify({})
+      body: JSON.stringify({}),
     });
-    const json = await resp.json();
-    console.log('[cronJobs] Pi auto-deactivate response:', json.message);
+    if (!resp.ok) {
+      throw new Error(`HTTP ${resp.status}`);
+    }
+    const payload = await resp.json();
+    console.log('[cronJobs] Pi auto-deactivate response:', payload.message);
   } catch (err) {
-    console.error('[cronJobs] Error calling Pi auto-deactivate:', err);
+    console.warn('[cronJobs] Pi auto-deactivate failed, skipping:', err.message);
   }
 });
-
-
 
 // —————————————————————————————————————————————————————————————————————————————
 // HOUSEKEEPING LOGIC (every hour)
 // —————————————————————————————————————————————————————————————————————————————
 
-// 6) Delete mac_addresses unauthenticated >1h
 async function cleanupStaleMacs() {
-  const cutoff = new Date(Date.now() - 1000*60*60).toISOString();
+  const cutoff = new Date(Date.now() - 1000 * 60 * 60).toISOString();
   const { error } = await supabase
     .from('mac_addresses')
     .delete()
-    .eq('status','unauthenticated')
+    .eq('status', 'unauthenticated')
     .lt('created_at', cutoff);
   if (error) console.error('[Housekeeping] stale mac_addresses:', error);
   else console.log('[Housekeeping] cleaned stale mac_addresses');
 }
 
-// 7) Remove no-shows: registered & no check_in after X minutes
 async function cleanupNoShows() {
-  const Xmin   = 15; // e.g. 15 minutes
-  const cutoff = new Date(Date.now() - Xmin*60*1000).toISOString();
+  const Xmin = 15; // minutes
+  const cutoff = new Date(Date.now() - Xmin * 60 * 1000).toISOString();
   const { error } = await supabase
     .from('room_occupancy_history')
     .delete()
-    .eq('event_indicator','registered')
+    .eq('event_indicator', 'registered')
     .is('check_in', null)
     .lt('registration_time', cutoff);
   if (error) console.error('[Housekeeping] no-shows:', error);
   else console.log('[Housekeeping] removed no-shows');
 }
 
-// 8) Purge service_requests older than 30d and final state
 async function cleanupServiceRequests() {
-  const cutoff = new Date(Date.now() - 30*24*60*60*1000).toISOString();
+  const cutoff = new Date(
+    Date.now() - 30 * 24 * 60 * 60 * 1000
+  ).toISOString();
   const { error } = await supabase
     .from('service_requests')
     .delete()
-    .in('status',['completed','rejected'])
+    .in('status', ['completed', 'rejected'])
     .lt('created_at', cutoff);
   if (error) console.error('[Housekeeping] old service_requests:', error);
   else console.log('[Housekeeping] purged old service_requests');
 }
 
-// 9) Prune notifications read or >7d
 async function cleanupNotifications() {
-  const cutoff = new Date(Date.now() - 7*24*60*60*1000).toISOString();
+  const cutoff = new Date(
+    Date.now() - 7 * 24 * 60 * 60 * 1000
+  ).toISOString();
   const { error } = await supabase
     .from('notifications')
     .delete()
@@ -212,9 +227,10 @@ async function cleanupNotifications() {
   else console.log('[Housekeeping] pruned notifications');
 }
 
-// 10) Delete request_logs >90d
 async function cleanupRequestLogs() {
-  const cutoff = new Date(Date.now() - 90*24*60*60*1000).toISOString();
+  const cutoff = new Date(
+    Date.now() - 90 * 24 * 60 * 60 * 1000
+  ).toISOString();
   const { error } = await supabase
     .from('request_logs')
     .delete()
@@ -223,17 +239,19 @@ async function cleanupRequestLogs() {
   else console.log('[Housekeeping] cleaned request_logs');
 }
 
-// 11) Reset “reserved” rooms whose check_in has passed
 async function cleanupOrphanedReservations() {
   const nowIso = new Date().toISOString();
   const { data: rooms, error: fetchErr } = await supabase
     .from('rooms')
     .select('id,room_number')
-    .eq('status','reserved')
+    .eq('status', 'reserved')
     .lt('check_in', nowIso);
 
   if (fetchErr) {
-    console.error('[Housekeeping] fetch orphaned reservations:', fetchErr);
+    console.error(
+      '[Housekeeping] fetch orphaned reservations:',
+      fetchErr
+    );
     return;
   }
   for (const r of rooms) {
