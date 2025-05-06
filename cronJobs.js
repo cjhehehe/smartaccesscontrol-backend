@@ -147,30 +147,32 @@ cron.schedule('*/30 * * * * *', async () => {
   // → Pi Auto-Deactivate (only if configured)
   const PI_URL = process.env.PI_GATEWAY_URL;
   const API_KEY = process.env.PUBLIC_API_KEY;
-  if (!PI_URL || !API_KEY) {
-    console.log(
-      '[cronJobs] Skipping Pi auto-deactivate: PI_GATEWAY_URL or PUBLIC_API_KEY not set.'
-    );
-    return;
-  }
-
-  try {
-    console.log('[cronJobs] Triggering Pi auto-deactivate…');
-    const resp = await fetch(`${PI_URL}/auto-deactivate-expired`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': API_KEY,
-      },
-      body: JSON.stringify({}),
-    });
-    if (!resp.ok) {
-      throw new Error(`HTTP ${resp.status}`);
+  if (PI_URL && API_KEY) {
+    try {
+      console.log('[cronJobs] Triggering Pi auto-deactivate…');
+      const resp = await fetch(`${PI_URL}/auto-deactivate-expired`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-api-key': API_KEY,
+        },
+        body: JSON.stringify({}),
+      });
+      if (!resp.ok) {
+        console.warn(
+          `[cronJobs] Pi auto-deactivate endpoint returned HTTP ${resp.status}`
+        );
+      } else {
+        const payload = await resp.json();
+        console.log('[cronJobs] Pi auto-deactivate response:', payload.message);
+      }
+    } catch (err) {
+      console.warn('[cronJobs] Pi auto-deactivate failed, skipping:', err.message);
     }
-    const payload = await resp.json();
-    console.log('[cronJobs] Pi auto-deactivate response:', payload.message);
-  } catch (err) {
-    console.warn('[cronJobs] Pi auto-deactivate failed, skipping:', err.message);
+  } else {
+    console.log(
+      '[cronJobs] PI_GATEWAY_URL / PUBLIC_API_KEY not set — skipping Pi auto-deactivate.'
+    );
   }
 });
 
